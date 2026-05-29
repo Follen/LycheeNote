@@ -357,7 +357,7 @@ local function PatchNoobIconHeader(list, preferredKey)
       local oldIconHandler = header.iconHandler
       header.iconHandler = function(data)
         if data and GetSetting("showIcon") and ((data.GetRememberNoobMatched and data:GetRememberNoobMatched()) or ActivityHasNoobLeader(data)) then
-          return [[Interface\TargetingFrame\UI-RaidTargetingIcon_8]]
+          return [[Interface\TargetingFrame\UI-RaidTargetingIcon_8]], nil, nil, nil, nil, 18, 18
         end
         if preferredKey == "starTarget" then return nil end
         if oldIconHandler then
@@ -513,6 +513,16 @@ local function HookApplicantPanelList()
     PatchApplicantNameHeader(ApplicantPanel.ApplicantList)
 
     local list = ApplicantPanel.ApplicantList
+    if type(list.buttons) == "table" then
+      for _, button in ipairs(list.buttons) do
+        if button and button.starTarget and button.starTarget.Icon then
+          button.starTarget.width = 18
+          button.starTarget.height = 18
+          button.starTarget.Icon:SetSize(18, 18)
+        end
+      end
+    end
+
     if not list.__RememberNoobGroupedHooked and list.events and list.events.OnItemGrouped then
       list.__RememberNoobGroupedHooked = true
       local oldOnItemGrouped = list.events.OnItemGrouped
