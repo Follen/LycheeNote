@@ -16,5 +16,6 @@ Domains\Noob\Noob.lua
 Domains\Noob\Events.lua
 Domains\Noob\Inspect.lua
 Domains\Noob\Menu.lua
+Domains\Noob\MeetingStone.lua
 Domains\Noob\UI.lua
 Domains\Noob\Dialogs.lua

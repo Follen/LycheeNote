@@ -215,7 +215,7 @@ end
 
 local function CreatePageTitle(parent, title, subtitle)
   local titleText = Controls and Controls.CreateText and
-    Controls.CreateText(parent, title, "GameFontHighlight", "VALUE_COLOR")
+    Controls.CreateText(parent, title, "GameFontNormalLarge", "VALUE_COLOR")
   if titleText and titleText.SetPoint then
     titleText:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, 0)
   end
@@ -254,6 +254,9 @@ local function SetConfigValue(configPath, value)
   if ns.Config and ns.Config.Set then
     ns.Config.Set(configPath, value and true or false)
   end
+  if ns.RememberNoobMeetingStone and ns.RememberNoobMeetingStone.Refresh then
+    ns.RememberNoobMeetingStone.Refresh()
+  end
 end
 
 local function SetShown(frame, shown)
@@ -289,7 +292,7 @@ local function CreateSidebarButton(parent, text, width, height, active)
   button.accent:SetColorTexture(0.408, 0.659, 0.671, 1)
 
   local label = Controls and Controls.CreateText and
-    Controls.CreateText(button, text, "GameFontHighlightSmall", "VALUE_COLOR")
+    Controls.CreateText(button, text, "GameFontNormal", "VALUE_COLOR")
   if label and label.SetPoint then label:SetPoint("LEFT", button, "LEFT", 18, 0) end
   if label and label.SetJustifyH then label:SetJustifyH("LEFT") end
   button.label = label
@@ -320,10 +323,10 @@ local function CreateSidebarButton(parent, text, width, height, active)
   return button
 end
 
-local function CreateConfigCheckButton(parent, label, description, configPath, yOffset)
+local function CreateConfigCheckButton(parent, label, configPath, yOffset)
   local row = CreateFrame("Frame", nil, parent, "BackdropTemplate")
   row:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, yOffset)
-  row:SetSize(640, 54)
+  row:SetSize(640, 34)
   row:EnableMouse(true)
   row:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8" })
   SetColor(row, "SetBackdropColor", {0.055, 0.055, 0.07, 0.24})
@@ -344,17 +347,9 @@ local function CreateConfigCheckButton(parent, label, description, configPath, y
   SetColor(check.inner, "SetColorTexture", Style and Style.Get and Style.Get("ACCENT_COLOR") or {0.408, 0.659, 0.671, 1})
 
   local labelText = Controls and Controls.CreateText and
-    Controls.CreateText(row, label, "GameFontNormal", "VALUE_COLOR")
+    Controls.CreateText(row, label, "GameFontHighlight", "VALUE_COLOR")
   if labelText and labelText.SetPoint then
-    labelText:SetPoint("TOPLEFT", check, "TOPRIGHT", 14, 6)
-  end
-
-  local descText = Controls and Controls.CreateText and
-    Controls.CreateText(row, description, "GameFontNormalSmall", "LABEL_COLOR")
-  if descText and descText.SetPoint then
-    descText:SetPoint("TOPLEFT", labelText or check, labelText and "BOTTOMLEFT" or "TOPRIGHT", 0, -5)
-    descText:SetWidth(580)
-    descText:SetJustifyH("LEFT")
+    labelText:SetPoint("LEFT", check, "RIGHT", 14, 0)
   end
 
   function check:Refresh()
@@ -383,10 +378,10 @@ function UI.CreateListPanel(listPanel)
   local headers = {"玩家姓名", "服务器名称", "职业专精", "加入时间", "加入原因"}
   local columnWidths = {100, 95, 115, 85, 225}
 
-  local _, subtitleText = CreatePageTitle(listPanel, "笨蛋列表", "右键玩家条目可编辑备注或移除标记。")
+  local titleText = CreatePageTitle(listPanel, "笨蛋列表")
 
   local headerFrame = CreateFrame("Frame", nil, listPanel, "BackdropTemplate")
-  headerFrame:SetPoint("TOPLEFT", subtitleText or listPanel, subtitleText and "BOTTOMLEFT" or "TOPLEFT", 0, -16)
+  headerFrame:SetPoint("TOPLEFT", titleText or listPanel, titleText and "BOTTOMLEFT" or "TOPLEFT", 0, -18)
   headerFrame:SetSize(640, 30)
   headerFrame:SetBackdrop({
     bgFile = "Interface\\Buttons\\WHITE8x8",
@@ -515,11 +510,11 @@ function UI.CreateImportPanel(panel, listPanel)
 
   local scrollFrame = CreateFrame("ScrollFrame", nil, panel, "UIPanelScrollFrameTemplate")
   scrollFrame:SetPoint("TOPLEFT", tipText or panel, "BOTTOMLEFT", 0, -10)
-  scrollFrame:SetSize(624, 294)
+  scrollFrame:SetSize(624, 240)
   StyleScrollBar(scrollFrame)
 
   local inputBg = CreateFrame("Frame", nil, scrollFrame, "BackdropTemplate")
-  inputBg:SetSize(606, 294)
+  inputBg:SetSize(606, 240)
   inputBg:SetBackdrop({
     bgFile = "Interface\\Buttons\\WHITE8x8",
     edgeFile = "Interface\\Buttons\\WHITE8x8",
@@ -637,11 +632,11 @@ function UI.CreateExportPanel(panel)
 
   local scrollFrame = CreateFrame("ScrollFrame", nil, panel, "UIPanelScrollFrameTemplate")
   scrollFrame:SetPoint("TOPLEFT", tipText or panel, "BOTTOMLEFT", 0, -10)
-  scrollFrame:SetSize(624, 294)
+  scrollFrame:SetSize(624, 240)
   StyleScrollBar(scrollFrame)
 
   local displayBg = CreateFrame("Frame", nil, scrollFrame, "BackdropTemplate")
-  displayBg:SetSize(606, 294)
+  displayBg:SetSize(606, 240)
   displayBg:SetBackdrop({
     bgFile = "Interface\\Buttons\\WHITE8x8",
     edgeFile = "Interface\\Buttons\\WHITE8x8",
@@ -707,71 +702,40 @@ function UI.CreateExportPanel(panel)
 end
 
 function UI.CreateMeetingStoneSettingsPanel(panel)
-  local _, subtitleText = CreatePageTitle(panel, "集合石设置", "控制集合石列表中命中笨蛋名单时的展示和快捷处理方式。")
+  CreatePageTitle(panel, "集合石设置")
 
-  local startY = -58
+  local startY = -54
   CreateConfigCheckButton(
     panel,
     "是否显示图标",
-    "命中笨蛋名单时，在集合石相关条目旁显示提示图标。",
     "meetingStone.showIcon",
     startY)
   CreateConfigCheckButton(
     panel,
     "是否标红高亮",
-    "命中笨蛋名单时，将玩家姓名或所在条目用红色高亮。",
     "meetingStone.highlightNoob",
-    startY - 60)
+    startY - 46)
   CreateConfigCheckButton(
     panel,
     "是否启用一键拒绝笨蛋",
-    "后续接入集合石申请列表后，允许对命中的申请人快速拒绝。",
     "meetingStone.enableOneClickReject",
-    startY - 120)
-
-  CreateWrappedText(
-    panel,
-    "这些开关会先保存配置；实际集合石列表标记和拒绝逻辑将在过滤功能确认后接入。",
-    subtitleText or panel,
-    0,
-    -220,
-    620)
+    startY - 92)
 end
 
 function UI.CreateMeetingStoneFilterPanel(panel)
-  local titleText = CreatePageTitle(panel, "集合石过滤", "这里先放过滤方案，等规则确认后再接入集合石实际列表和申请事件。")
-
-  local planTitle = Controls and Controls.CreateText and
-    Controls.CreateText(panel, "建议方案", "GameFontNormal", "VALUE_COLOR")
-  if planTitle and planTitle.SetPoint then
-    planTitle:SetPoint("TOPLEFT", titleText or panel, titleText and "BOTTOMLEFT" or "TOPLEFT", 0, -36)
-  end
-
-  local items = {
-    "过滤对象：优先匹配申请人，其次可扩展到队伍成员和队长。",
-    "命中来源：先只使用笨蛋列表，避免额外规则误伤正常玩家。",
-    "处理动作：提供仅提示、标红显示、一键拒绝三个层级。",
-    "例外规则：后续可加入好友、公会成员、当前队伍成员不处理。",
-    "记录回溯：保存最近过滤记录，方便查看被拦截玩家和原因。",
-  }
-
-  local anchor = planTitle
-  for index, text in ipairs(items) do
-    local item = CreateWrappedText(panel, index .. ". " .. text, anchor or panel, 0, index == 1 and -12 or -10, 620)
-    anchor = item
-  end
+  CreatePageTitle(panel, "集合石过滤")
 end
 
 function UI.CreateDataManagementPanel(panel, listPanel)
-  local _, subtitleText = CreatePageTitle(panel, "数据管理", "导入、导出笨蛋列表数据，用于备份或分享。")
+  local titleText = CreatePageTitle(panel, "数据管理")
 
   local switchContainer = CreateFrame("Frame", nil, panel)
-  switchContainer:SetPoint("TOPLEFT", subtitleText or panel, subtitleText and "BOTTOMLEFT" or "TOPLEFT", 0, -16)
+  switchContainer:SetPoint("TOPLEFT", titleText or panel, titleText and "BOTTOMLEFT" or "TOPLEFT", 0, -18)
   switchContainer:SetSize(640, 30)
 
   local content = CreateFrame("Frame", nil, panel)
-  content:SetPoint("TOPLEFT", switchContainer, "BOTTOMLEFT", 0, -28)
-  content:SetSize(640, 350)
+  content:SetPoint("TOPLEFT", switchContainer, "BOTTOMLEFT", 0, -24)
+  content:SetSize(640, 316)
 
   local importPanel = CreateFrame("Frame", nil, content)
   importPanel:SetAllPoints(content)
@@ -817,7 +781,7 @@ function UI.ShowManagementUI()
   end
 
   local frame = CreateFrame("Frame", "RememberNoobManagementFrame", UIParent, "BackdropTemplate")
-  frame:SetSize(860, 540)
+  frame:SetSize(900, 560)
   frame:SetPoint("CENTER")
   frame:EnableMouse(true)
   frame:SetMovable(true)
@@ -844,17 +808,17 @@ function UI.ShowManagementUI()
   frame.closeButton = closeBtn
 
   local sidebar = CreateFrame("Frame", nil, frame, "BackdropTemplate")
-  sidebar:SetPoint("TOPLEFT", frame, "TOPLEFT", 20, -48)
+  sidebar:SetPoint("TOPLEFT", frame, "TOPLEFT", 22, -56)
   sidebar:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 20, 48)
-  sidebar:SetWidth(150)
+  sidebar:SetWidth(166)
   sidebar:SetBackdrop({
     bgFile = "Interface\\Buttons\\WHITE8x8",
   })
   SetColor(sidebar, "SetBackdropColor", {0.035, 0.035, 0.045, 0.32})
 
   local contentContainer = CreateFrame("Frame", nil, frame)
-  contentContainer:SetPoint("TOPLEFT", sidebar, "TOPRIGHT", 18, 0)
-  contentContainer:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -20, 48)
+  contentContainer:SetPoint("TOPLEFT", sidebar, "TOPRIGHT", 24, 0)
+  contentContainer:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -22, 48)
 
   local navButtons = {}
   local pagePanels = {}
@@ -862,9 +826,9 @@ function UI.ShowManagementUI()
   local currentPage = 1
 
   for i, pageName in ipairs(pageNames) do
-    local navButton = CreateSidebarButton(sidebar, pageName, 126, 34, i == 1)
+    local navButton = CreateSidebarButton(sidebar, pageName, 142, 38, i == 1)
     if navButton then
-      navButton:SetPoint("TOP", sidebar, "TOP", 0, -12 - (i - 1) * 42)
+      navButton:SetPoint("TOP", sidebar, "TOP", 0, -12 - (i - 1) * 50)
       navButton.pageIndex = i
       navButtons[i] = navButton
       navButton:SetScript("OnClick", function()
