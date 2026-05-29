@@ -841,6 +841,7 @@ function UI.RefreshDebugLogPanel()
   local count = meetingStone and meetingStone.GetFilterLogCount and meetingStone.GetFilterLogCount() or 0
   local status = meetingStone and meetingStone.GetFilterLogStatus and meetingStone.GetFilterLogStatus() or ""
   local text = meetingStone and meetingStone.GetFilterLogText and meetingStone.GetFilterLogText() or ""
+  local displayText = meetingStone and meetingStone.GetFilterLogDisplayText and meetingStone.GetFilterLogDisplayText() or text
 
   if panel.logButton and panel.logButton.label then
     panel.logButton.label:SetText(enabled and "关闭集合石过滤日志" or "开启集合石过滤日志")
@@ -854,18 +855,18 @@ function UI.RefreshDebugLogPanel()
     end
   end
   local lineCount = 1
-  for _ in string.gmatch(text, "\n") do
+  for _ in string.gmatch(displayText, "\n") do
     lineCount = lineCount + 1
   end
   local contentHeight = math.max(316, lineCount * 16 + 20)
 
   if panel.logText then
-    panel.logText:SetText(text)
+    panel.logText:SetText(displayText)
     panel.logText:SetHeight(contentHeight - 16)
     panel.logText:Show()
   end
   if panel.copyBox then
-    panel.copyBox:SetText(text)
+    panel.copyBox:SetText(displayText)
     panel.copyBox:SetCursorPosition(0)
     panel.copyBox:SetHeight(contentHeight - 16)
     panel.copyBox:Show()
@@ -903,6 +904,7 @@ local function SelectDebugLog(panel)
   panel.copyBox:SetEnabled(true)
   panel.copyBox:SetFocus()
   panel.copyBox:HighlightText()
+  print("|cff00ff00RememberNoob: 已全选调试日志，按 Ctrl+C 复制|r")
 end
 
 local function UpdateDebugLogHeight(panel)
