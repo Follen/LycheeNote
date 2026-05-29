@@ -196,8 +196,12 @@ function MeetingStone.SearchDebugCategory(categoryID, baseFilter)
   if C_LFGList and C_LFGList.Search then
     local languages = C_LFGList.GetLanguageSearchFilter and C_LFGList.GetLanguageSearchFilter()
     local advancedFilter = debugSearchCategoryID == 2 and C_LFGList.GetAdvancedFilter and C_LFGList.GetAdvancedFilter()
-    local filterValue = debugSearchBaseFilter or 0
-    pcall(C_LFGList.Search, debugSearchCategoryID, filterValue, 0, languages, nil, advancedFilter)
+    local filterValue = debugSearchCategoryID == 2 and 1 or 0
+    pcall(C_LFGList.Search, debugSearchCategoryID, filterValue, nil, languages, nil, advancedFilter)
+    if C_Timer and C_Timer.After then
+      C_Timer.After(0.5, RecordCurrentSearchResults)
+      C_Timer.After(1.5, RecordCurrentSearchResults)
+    end
     return true
   end
   return false

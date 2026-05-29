@@ -380,47 +380,94 @@ end
 
 local function CreateDebugCategoryDropdown(parent)
   local menuTable = {
-    {text = "地下堡", value = "delve", categoryID = 121, baseFilter = Enum and Enum.LFGListFilter and Enum.LFGListFilter.PvE or 1},
-    {text = "地下城", value = "dungeon", categoryID = 2, baseFilter = Enum and Enum.LFGListFilter and Enum.LFGListFilter.PvE or 1},
-    {text = "团队副本", value = "raid", categoryID = 3, baseFilter = Enum and Enum.LFGListFilter and Enum.LFGListFilter.PvE or 1},
-    {text = "PVP", value = "pvp", categoryID = 8, baseFilter = Enum and Enum.LFGListFilter and Enum.LFGListFilter.PvP or 2},
-    {text = "自定义", value = "custom", categoryID = 6, baseFilter = Enum and Enum.LFGListFilter and Enum.LFGListFilter.PvE or 1},
-    {text = "任务", value = "quest", categoryID = 1, baseFilter = Enum and Enum.LFGListFilter and Enum.LFGListFilter.PvE or 1},
+    {text = "地下堡", value = "delve", categoryID = 121},
+    {text = "地下城", value = "dungeon", categoryID = 2},
+    {text = "团队副本", value = "raid", categoryID = 3},
+    {text = "PVP", value = "pvp", categoryID = 8},
+    {text = "自定义", value = "custom", categoryID = 6},
+    {text = "任务", value = "quest", categoryID = 1},
   }
 
-  local dropdown
-  local GUI = LibStub and LibStub("NetEaseGUI-2.0", true)
-  local Dropdown = GUI and GUI.GetClass and GUI:GetClass("Dropdown")
-  if Dropdown and Dropdown.New then
-    dropdown = Dropdown:New(parent)
-    dropdown:SetSize(150, 28)
-    dropdown:SetMenuTable(menuTable)
-    dropdown:SetMaxItem(8)
-    dropdown:SetItem(menuTable[1])
-  else
-    dropdown = Controls and Controls.CreateButton and Controls.CreateButton(parent, menuTable[1].text, 150, 28)
-    dropdown.item = menuTable[1]
-    dropdown.GetItem = function(self) return self.item end
+  local dropdown = CreateFrame("Button", nil, parent, "BackdropTemplate")
+  dropdown:SetSize(150, 28)
+  dropdown.item = menuTable[1]
+  dropdown:SetBackdrop({
+    bgFile = "Interface\\Buttons\\WHITE8x8",
+    edgeFile = "Interface\\Buttons\\WHITE8x8",
+    edgeSize = 1,
+  })
+  SetColor(dropdown, "SetBackdropColor", {0.055, 0.055, 0.07, 0.70})
+  SetColor(dropdown, "SetBackdropBorderColor", {0.20, 0.20, 0.23, 0.56})
+
+  local label = Controls and Controls.CreateText and
+    Controls.CreateText(dropdown, menuTable[1].text, "GameFontHighlightSmall", "VALUE_COLOR")
+  if label and label.SetPoint then
+    label:SetPoint("LEFT", dropdown, "LEFT", 10, 0)
+  end
+  dropdown.label = label
+
+  local arrow = Controls and Controls.CreateText and
+    Controls.CreateText(dropdown, "v", "GameFontHighlightSmall", "LABEL_COLOR")
+  if arrow and arrow.SetPoint then
+    arrow:SetPoint("RIGHT", dropdown, "RIGHT", -10, 0)
   end
 
-  if dropdown and dropdown.SetCallback then
-    dropdown:SetCallback("OnSelectChanged", function(_, item)
-      if ns.RememberNoobMeetingStone and ns.RememberNoobMeetingStone.SearchDebugCategory then
-        ns.RememberNoobMeetingStone.SearchDebugCategory(item.categoryID, item.baseFilter)
-      end
+  local menu = CreateFrame("Frame", nil, parent, "BackdropTemplate")
+  menu:SetPoint("TOPLEFT", dropdown, "BOTTOMLEFT", 0, -4)
+  menu:SetSize(150, #menuTable * 26 + 8)
+  menu:SetFrameLevel(parent:GetFrameLevel() + 30)
+  menu:SetBackdrop({
+    bgFile = "Interface\\Buttons\\WHITE8x8",
+    edgeFile = "Interface\\Buttons\\WHITE8x8",
+    edgeSize = 1,
+  })
+  SetColor(menu, "SetBackdropColor", {0.045, 0.045, 0.06, 0.96})
+  SetColor(menu, "SetBackdropBorderColor", {0.408, 0.659, 0.671, 0.46})
+  menu:Hide()
+
+  local function SelectItem(item)
+    dropdown.item = item
+    if dropdown.label then dropdown.label:SetText(item.text) end
+    menu:Hide()
+    if ns.RememberNoobMeetingStone and ns.RememberNoobMeetingStone.SearchDebugCategory then
+      ns.RememberNoobMeetingStone.SearchDebugCategory(item.categoryID, item.baseFilter)
+    end
+  end
+
+  for index, item in ipairs(menuTable) do
+    local option = CreateFrame("Button", nil, menu, "BackdropTemplate")
+    option:SetPoint("TOPLEFT", menu, "TOPLEFT", 4, -4 - (index - 1) * 26)
+    option:SetSize(142, 24)
+    option:SetBackdrop({bgFile = "Interface\\Buttons\\WHITE8x8"})
+    SetColor(option, "SetBackdropColor", {0, 0, 0, 0})
+    local optionText = Controls and Controls.CreateText and
+      Controls.CreateText(option, item.text, "GameFontHighlightSmall", "VALUE_COLOR")
+    if optionText and optionText.SetPoint then
+      optionText:SetPoint("LEFT", option, "LEFT", 8, 0)
+    end
+    option:SetScript("OnEnter", function(self)
+      SetColor(self, "SetBackdropColor", {0.408, 0.659, 0.671, 0.18})
     end)
-  elseif dropdown and dropdown.SetScript then
-    dropdown:SetScript("OnClick", function(self)
-      self.__rnIndex = (self.__rnIndex or 1) + 1
-      if self.__rnIndex > #menuTable then self.__rnIndex = 1 end
-      self.item = menuTable[self.__rnIndex]
-      if self.label then self.label:SetText(self.item.text) end
-      if ns.RememberNoobMeetingStone and ns.RememberNoobMeetingStone.SearchDebugCategory then
-        ns.RememberNoobMeetingStone.SearchDebugCategory(self.item.categoryID, self.item.baseFilter)
-      end
+    option:SetScript("OnLeave", function(self)
+      SetColor(self, "SetBackdropColor", {0, 0, 0, 0})
+    end)
+    option:SetScript("OnClick", function()
+      SelectItem(item)
     end)
   end
 
+  dropdown.GetItem = function(self) return self.item end
+  dropdown:SetScript("OnClick", function()
+    SetShown(menu, not menu:IsShown())
+  end)
+  dropdown:SetScript("OnEnter", function(self)
+    SetColor(self, "SetBackdropBorderColor", {0.408, 0.659, 0.671, 0.70})
+  end)
+  dropdown:SetScript("OnLeave", function(self)
+    SetColor(self, "SetBackdropBorderColor", {0.20, 0.20, 0.23, 0.56})
+  end)
+
+  dropdown.menu = menu
   return dropdown
 end
 
