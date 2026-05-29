@@ -10,12 +10,15 @@ local filterLogDisplayLines = {}
 local filterLogSeen = {}
 local filterLogHeader = "时间\t活动分类\t活动类型\t活动名称\t活动标题\t团长\t说明"
 local filterLogDisplayHeader = "时间 | 活动分类 | 活动类型 | 活动名称 | 活动标题 | 团长 | 说明"
-local filterLogLimit = 500
+local filterLogLimit = 2000
 local filterLogNotifyPending = false
 local filterLogScanToken = 0
 local debugSearchCategoryID = 121
 local debugSearchBaseFilter = Enum and Enum.LFGListFilter and Enum.LFGListFilter.PvE or 1
 local debugLogStatus = "待搜索"
+local debugSearchQueue = nil
+local debugSearchQueueIndex = 0
+local debugSearchActive = false
 
 local function GetMeetingStoneEnv()
   local ok, env = pcall(function()
@@ -110,26 +113,89 @@ local function GetActivityGroupName(activityInfo)
   if type(activityInfo) ~= "table" then return "" end
   local groupID = activityInfo.groupFinderActivityGroupID
   if groupID and C_LFGList and C_LFGList.GetActivityGroupInfo then
-    return SafeCFunction(C_LFGList.GetActivityGroupInfo, groupID) or ""
+    local value = SafeCFunction(C_LFGList.GetActivityGroupInfo, groupID)
+    if type(value) == "table" and value.name then
+      return value.name
+    end
+    return value or ""
   end
   return ""
 end
 
-local function BuildFilterLogLineFromSearchResult(resultID)
-  if not resultID or not C_LFGList or not C_LFGList.GetSearchResultInfo then return nil end
-  local info = SafeCFunction(C_LFGList.GetSearchResultInfo, resultID)
-  if type(info) ~= "table" then return nil end
+local function GetActivityCategoryNameFromActivity(activity, activityInfo)
+  if not activity then return "" end
+  local getter = activity.GetCategoryName or activity.GetActivityCategoryName
+  if getter then
+    local ok, value = pcall(getter, activity)
+    if ok and value then
+      return value
+    end
+  end
+  if type(activityInfo) == "table" then
+    local categoryID = activityInfo.categoryID or activityInfo.groupFinderCategoryID
+    if categoryID and C_LFGList and C_LFGList.GetLfgCategoryInfo then
+      local categoryInfo = SafeCFunction(C_LFGList.GetLfgCategoryInfo, categoryID)
+      if type(categoryInfo) == "table" and categoryInfo.name then
+        return categoryInfo.name
+      elseif type(categoryInfo) == "string" then
+        return categoryInfo
+      end
+    end
+  end
+  return ""
+end
 
-  local activityID = GetSearchResultActivityID(info)
+local function GetActivityTypeName(activity, activityInfo)
+  if not activity then return "" end
+  local getter = activity.GetShortName or activity.GetModeText
+  if getter then
+    local ok, value = pcall(getter, activity)
+    if ok and value and value ~= "" then
+      return value
+    end
+  end
+  if type(activityInfo) == "table" then
+    local groupName = GetActivityGroupName(activityInfo)
+    if groupName ~= "" then
+      return groupName
+    end
+    if activityInfo.shortName then
+      return activityInfo.shortName
+    end
+  end
+  return ""
+end
+
+local function ClearMeetingStoneSearchText()
+  if C_LFGList and C_LFGList.ClearSearchTextFields then
+    pcall(C_LFGList.ClearSearchTextFields)
+  end
+  local browsePanel = GetMeetingStoneValue("BrowsePanel") or _G.MeetingStone_BrowsePanel
+  local searchBox = browsePanel and browsePanel.SearchBox
+  if searchBox and searchBox.SetText then
+    pcall(searchBox.SetText, searchBox, "")
+  end
+  if searchBox and searchBox.ClearFocus then
+    pcall(searchBox.ClearFocus, searchBox)
+  end
+end
+
+local function BuildFilterLogLineFromActivity(activity)
+  if not activity then return nil end
+  local activityID = SafeCFunction(activity.GetActivityID, activity)
   local activityInfo = GetActivityInfo(activityID)
+  local name = SafeCFunction(activity.GetName, activity) or ""
+  local title = SafeCFunction(activity.GetSummary, activity) or ""
+  local leader = SafeCFunction(activity.GetLeader, activity) or ""
+  local comment = SafeCFunction(activity.GetComment, activity) or ""
   local fields = {
     date("%H:%M:%S"),
-    GetActivityCategoryFromInfo(activityInfo),
-    GetActivityGroupName(activityInfo),
-    (activityInfo and (activityInfo.fullName or activityInfo.shortName)) or "",
-    info.name or "",
-    info.leaderName or "",
-    info.comment or "",
+    GetActivityCategoryNameFromActivity(activity, activityInfo),
+    GetActivityTypeName(activity, activityInfo),
+    name,
+    title,
+    leader,
+    comment,
   }
 
   for i, value in ipairs(fields) do
@@ -138,10 +204,11 @@ local function BuildFilterLogLineFromSearchResult(resultID)
   return table.concat(fields, "\t"), table.concat(fields, " | ")
 end
 
-local function AddFilterLogSearchResult(resultID)
-  local line, displayLine = BuildFilterLogLineFromSearchResult(resultID)
+local function AddFilterLogActivity(activity)
+  local line, displayLine = BuildFilterLogLineFromActivity(activity)
   if not line or line == "" then return false end
-  local key = tostring(resultID) .. "\t" .. line
+  local code = SafeCFunction(activity.GetCode, activity) or SafeCFunction(activity.GetID, activity) or line
+  local key = tostring(code) .. "\t" .. line
   if filterLogSeen[key] then return false end
 
   filterLogSeen[key] = true
@@ -163,28 +230,32 @@ local function AddFilterLogSearchResult(resultID)
 end
 
 local function RecordCurrentSearchResults()
-  if not filterLogEnabled or not C_LFGList or not C_LFGList.GetSearchResults then return end
-  local ok, first, second = pcall(C_LFGList.GetSearchResults)
-  if not ok then return end
-  local results = type(second) == "table" and second or type(first) == "table" and first or nil
-  if type(results) ~= "table" then return end
-  debugLogStatus = "结果: " .. #results
+  if not filterLogEnabled then return end
+  local lfgService = GetMeetingStoneValue("LfgService")
+  local activities = lfgService and lfgService.GetActivityList and lfgService:GetActivityList()
+  if type(activities) ~= "table" then
+    debugLogStatus = "结果: 0"
+    NotifyFilterLogChanged()
+    return
+  end
+
+  debugLogStatus = "结果: " .. #activities
 
   filterLogScanToken = filterLogScanToken + 1
   local token = filterLogScanToken
   local index = 1
-  local batchSize = 35
+  local batchSize = 20
 
   local function ScanBatch()
     if token ~= filterLogScanToken or not filterLogEnabled then return end
     local changed = false
-    local batchEnd = math.min(index + batchSize - 1, #results)
+    local batchEnd = math.min(index + batchSize - 1, #activities)
     for i = index, batchEnd do
-      changed = AddFilterLogSearchResult(results[i]) or changed
+      changed = AddFilterLogActivity(activities[i]) or changed
     end
     if changed then ScheduleFilterLogChanged() end
     index = batchEnd + 1
-    if index <= #results and C_Timer and C_Timer.After then
+    if index <= #activities and C_Timer and C_Timer.After then
       C_Timer.After(0, ScanBatch)
     end
   end
@@ -192,11 +263,82 @@ local function RecordCurrentSearchResults()
   ScanBatch()
 end
 
-function MeetingStone.SearchDebugCategory(categoryID, baseFilter)
-  debugSearchCategoryID = categoryID or debugSearchCategoryID
-  debugSearchBaseFilter = baseFilter
-  debugLogStatus = "搜索中: " .. tostring(debugSearchCategoryID)
+local function StartDebugSearch(plan, statusText)
+  debugSearchQueue = plan or nil
+  debugSearchQueueIndex = 0
+  debugSearchActive = debugSearchQueue ~= nil and #debugSearchQueue > 0
+  if filterLogEnabled then
+    filterLogScanToken = filterLogScanToken + 1
+  end
+  if statusText and statusText ~= "" then
+    debugLogStatus = statusText
+  end
   NotifyFilterLogChanged()
+end
+
+local function ContinueDebugSearch()
+  if not debugSearchActive or not debugSearchQueue then
+    debugSearchActive = false
+    return
+  end
+
+  debugSearchQueueIndex = debugSearchQueueIndex + 1
+  local step = debugSearchQueue[debugSearchQueueIndex]
+  if not step then
+    debugSearchActive = false
+    debugSearchQueue = nil
+    debugLogStatus = "完成: " .. tostring(#filterLogLines)
+    NotifyFilterLogChanged()
+    return
+  end
+
+  debugSearchCategoryID = step.categoryID or debugSearchCategoryID
+  debugSearchBaseFilter = step.baseFilter or debugSearchBaseFilter
+  debugLogStatus = "搜索中: " .. tostring(step.label or debugSearchCategoryID)
+  NotifyFilterLogChanged()
+  ClearMeetingStoneSearchText()
+
+  local lfgService = GetMeetingStoneValue("LfgService")
+  if lfgService and lfgService.Search then
+    lfgService:Search(debugSearchCategoryID, debugSearchBaseFilter, step.activityID)
+  elseif C_LFGList and C_LFGList.Search then
+    local languages = C_LFGList.GetLanguageSearchFilter and C_LFGList.GetLanguageSearchFilter()
+    local advancedFilter = debugSearchCategoryID == 2 and C_LFGList.GetAdvancedFilter and C_LFGList.GetAdvancedFilter()
+    local filterValue = 0
+    if debugSearchCategoryID == 2 and Enum and Enum.LFGListFilter and bit then
+      filterValue = bit.band(bit.bnot(Enum.LFGListFilter.NotRecommended), Enum.LFGListFilter.Recommended)
+    end
+    pcall(C_LFGList.Search, debugSearchCategoryID, filterValue, debugSearchBaseFilter or 0, languages, nil, advancedFilter)
+  end
+end
+
+function MeetingStone.SearchDebugCategory(categoryOrItem, baseFilter)
+  local item = type(categoryOrItem) == "table" and categoryOrItem or nil
+  local categoryID = item and item.categoryID or categoryOrItem
+  local label = item and item.text or tostring(categoryID)
+
+  if item and item.searchPlan and type(item.searchPlan) == "table" then
+    StartDebugSearch(item.searchPlan, "搜索中: " .. label)
+    ContinueDebugSearch()
+    return true
+  end
+
+  debugSearchCategoryID = categoryID or debugSearchCategoryID
+  debugSearchBaseFilter = baseFilter or (item and item.baseFilter) or debugSearchBaseFilter
+  StartDebugSearch(nil, "搜索中: " .. tostring(label))
+  debugSearchActive = false
+  ClearMeetingStoneSearchText()
+
+  local lfgService = GetMeetingStoneValue("LfgService")
+  if lfgService and lfgService.Search then
+    local ok, err = pcall(lfgService.Search, lfgService, debugSearchCategoryID, debugSearchBaseFilter, item and item.activityID or nil)
+    if not ok then
+      debugLogStatus = "搜索失败: " .. tostring(err)
+      NotifyFilterLogChanged()
+      return false
+    end
+    return true
+  end
 
   if C_LFGList and C_LFGList.Search then
     local languages = C_LFGList.GetLanguageSearchFilter and C_LFGList.GetLanguageSearchFilter()
@@ -211,12 +353,9 @@ function MeetingStone.SearchDebugCategory(categoryID, baseFilter)
       NotifyFilterLogChanged()
       return false
     end
-    if C_Timer and C_Timer.After then
-      C_Timer.After(0.5, RecordCurrentSearchResults)
-      C_Timer.After(1.5, RecordCurrentSearchResults)
-    end
     return true
   end
+
   return false
 end
 
@@ -775,6 +914,27 @@ local function HookBrowsePanel()
     PatchNoobIconHeader(self.ActivityList)
     PatchLeaderHeader(self.ActivityList)
   end
+
+  local function HookResultHandler(methodName, advanceQueue)
+    local flagName = "__RememberNoob" .. methodName .. "Hooked"
+    if not BrowsePanel[methodName] or BrowsePanel[flagName] then return end
+    BrowsePanel[flagName] = true
+    local oldMethod = BrowsePanel[methodName]
+    BrowsePanel[methodName] = function(self, ...)
+      oldMethod(self, ...)
+      RecordCurrentSearchResults()
+      if advanceQueue and debugSearchActive and debugSearchQueue then
+        if C_Timer and C_Timer.After then
+          C_Timer.After(0.05, ContinueDebugSearch)
+        else
+          ContinueDebugSearch()
+        end
+      end
+    end
+  end
+
+  HookResultHandler("MEETINGSTONE_ACTIVITIES_RESULT_RECEIVED", true)
+  HookResultHandler("MEETINGSTONE_ACTIVITIES_RESULT_UPDATED", false)
 end
 
 local function HookApplicantPanelList()
@@ -844,7 +1004,6 @@ function MeetingStone.Initialize()
   frame:RegisterEvent("LFG_LIST_SEARCH_FAILED")
   frame:SetScript("OnEvent", function(self, event, addonName)
     if event == "LFG_LIST_SEARCH_RESULTS_RECEIVED" or event == "LFG_LIST_SEARCH_RESULT_UPDATED" then
-      RecordCurrentSearchResults()
       return
     end
     if event == "LFG_LIST_SEARCH_FAILED" then

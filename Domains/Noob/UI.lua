@@ -379,13 +379,21 @@ local function CreateConfigCheckButton(parent, label, configPath, yOffset)
 end
 
 local function CreateDebugCategoryDropdown(parent)
+  local pve = Enum and Enum.LFGListFilter and Enum.LFGListFilter.PvE or 1
+  local pvp = Enum and Enum.LFGListFilter and Enum.LFGListFilter.PvP or 2
   local menuTable = {
-    {text = "地下堡", value = "delve", categoryID = 121, baseFilter = Enum and Enum.LFGListFilter and Enum.LFGListFilter.PvE or 1},
-    {text = "地下城", value = "dungeon", categoryID = 2, baseFilter = Enum and Enum.LFGListFilter and Enum.LFGListFilter.PvE or 1},
-    {text = "团队副本", value = "raid", categoryID = 3, baseFilter = Enum and Enum.LFGListFilter and Enum.LFGListFilter.PvE or 1},
-    {text = "PVP", value = "pvp", categoryID = 8, baseFilter = Enum and Enum.LFGListFilter and Enum.LFGListFilter.PvP or 2},
-    {text = "自定义", value = "custom", categoryID = 6, baseFilter = Enum and Enum.LFGListFilter and Enum.LFGListFilter.PvE or 1},
-    {text = "任务", value = "quest", categoryID = 1, baseFilter = Enum and Enum.LFGListFilter and Enum.LFGListFilter.PvE or 1},
+    {text = "地下堡", value = "delve", categoryID = 121, baseFilter = pve},
+    {text = "地下城", value = "dungeon", categoryID = 2, baseFilter = pve},
+    {text = "团队副本", value = "raid", categoryID = 3, baseFilter = pve},
+    {text = "PVP", value = "pvp", categoryID = 4, baseFilter = pvp, searchPlan = {
+      {categoryID = 4, baseFilter = pvp, label = "PVP"},
+      {categoryID = 7, baseFilter = pvp, label = "PVP"},
+      {categoryID = 8, baseFilter = pvp, label = "PVP"},
+      {categoryID = 9, baseFilter = pvp, label = "PVP"},
+      {categoryID = 10, baseFilter = pvp, label = "PVP"},
+    }},
+    {text = "自定义", value = "custom", categoryID = 6, baseFilter = pve},
+    {text = "任务", value = "quest", categoryID = 1, baseFilter = pve},
   }
 
   local dropdown = CreateFrame("Button", nil, parent, "BackdropTemplate")
@@ -430,7 +438,7 @@ local function CreateDebugCategoryDropdown(parent)
     if dropdown.label then dropdown.label:SetText(item.text) end
     menu:Hide()
     if ns.RememberNoobMeetingStone and ns.RememberNoobMeetingStone.SearchDebugCategory then
-      ns.RememberNoobMeetingStone.SearchDebugCategory(item.categoryID, item.baseFilter)
+      ns.RememberNoobMeetingStone.SearchDebugCategory(item)
     end
   end
 
