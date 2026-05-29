@@ -4,6 +4,11 @@ ns.Config = {}
 
 local defaults = {
   enabled = true,
+  meetingStone = {
+    showIcon = true,
+    highlightNoob = true,
+    enableOneClickReject = false,
+  },
 }
 
 local function CopyDefaults(src, dst)
