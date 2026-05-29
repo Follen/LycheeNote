@@ -739,6 +739,7 @@ function UI.RefreshDebugLogPanel()
   local enabled = meetingStone and meetingStone.IsFilterLogEnabled and meetingStone.IsFilterLogEnabled()
   local count = meetingStone and meetingStone.GetFilterLogCount and meetingStone.GetFilterLogCount() or 0
   local text = meetingStone and meetingStone.GetFilterLogText and meetingStone.GetFilterLogText() or ""
+  local displayText = meetingStone and meetingStone.GetFilterLogDisplayText and meetingStone.GetFilterLogDisplayText() or text
 
   if panel.logButton and panel.logButton.label then
     panel.logButton.label:SetText(enabled and "关闭集合石过滤日志" or "开启集合石过滤日志")
@@ -747,9 +748,16 @@ function UI.RefreshDebugLogPanel()
     panel.countText:SetText("记录：" .. count)
   end
   if panel.logText then
-    panel.logText:SetText(text)
-    if panel.logBg and panel.logText.GetStringHeight then
-      panel.logBg:SetHeight(math.max(316, math.ceil(panel.logText:GetStringHeight() + 20)))
+    panel.logText:SetText(displayText)
+    local lineCount = 1
+    for _ in string.gmatch(displayText, "\n") do
+      lineCount = lineCount + 1
+    end
+    local contentHeight = math.max(316, lineCount * 16 + 20)
+    panel.logText:SetHeight(contentHeight - 16)
+    if panel.copyBox then panel.copyBox:SetHeight(contentHeight - 16) end
+    if panel.logBg then
+      panel.logBg:SetHeight(contentHeight)
     end
   end
   if panel.copyBox then

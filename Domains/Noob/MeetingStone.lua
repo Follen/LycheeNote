@@ -6,10 +6,13 @@ ns.RememberNoobMeetingStone = MeetingStone
 local hooked = false
 local filterLogEnabled = false
 local filterLogLines = {}
+local filterLogDisplayLines = {}
 local filterLogSeen = {}
 local filterLogHeader = "时间\t活动分类\t活动类型\t活动名称\t活动标题\t团长\t说明"
+local filterLogDisplayHeader = "时间 | 活动分类 | 活动类型 | 活动名称 | 活动标题 | 团长 | 说明"
 local filterLogLimit = 500
 local filterLogNotifyPending = false
+local filterLogScanToken = 0
 
 local function GetMeetingStoneEnv()
   local ok, env = pcall(function()
@@ -70,66 +73,80 @@ local function CleanLogValue(value)
   return value
 end
 
-local function SafeActivityCall(activity, methodName)
-  if not activity or type(activity[methodName]) ~= "function" then return nil end
-  local ok, value = pcall(activity[methodName], activity)
-  if ok then return value end
+local function SafeCFunction(fn, ...)
+  if type(fn) ~= "function" then return nil end
+  local ok, result = pcall(fn, ...)
+  if ok then return result end
 end
 
-local function GetActivityCategoryLabel(activity)
-  if type(GetActivityCategoryName) == "function" then
-    local ok, value = pcall(GetActivityCategoryName, activity)
-    if ok and value then return value end
+local function GetSearchResultActivityID(info)
+  if not info then return nil end
+  if info.activityID then return info.activityID end
+  if info.activityIDs then
+    local ok, activityID = pcall(function() return info.activityIDs[1] end)
+    if ok then return activityID end
   end
+end
 
-  local activityID = SafeActivityCall(activity, "GetActivityID")
-  if not activityID or not C_LFGList or not C_LFGList.GetActivityInfoTable then return "" end
-  local ok, info = pcall(C_LFGList.GetActivityInfoTable, activityID)
-  if not ok or type(info) ~= "table" then return "" end
-  if info.categoryID and C_LFGList.GetLfgCategoryInfo then
-    local categoryOk, name = pcall(C_LFGList.GetLfgCategoryInfo, info.categoryID)
-    if categoryOk and name then return name end
+local function GetActivityInfo(activityID)
+  if not activityID or not C_LFGList or not C_LFGList.GetActivityInfoTable then return nil end
+  local info = SafeCFunction(C_LFGList.GetActivityInfoTable, activityID)
+  if type(info) == "table" then return info end
+end
+
+local function GetActivityCategoryFromInfo(activityInfo)
+  if type(activityInfo) ~= "table" then return "" end
+  local categoryID = activityInfo.categoryID or activityInfo.groupFinderCategoryID
+  if categoryID and C_LFGList and C_LFGList.GetLfgCategoryInfo then
+    return SafeCFunction(C_LFGList.GetLfgCategoryInfo, categoryID) or ""
   end
   return ""
 end
 
-local function GetActivityTypeLabel(activity)
-  local groupID = SafeActivityCall(activity, "GetGroupID")
+local function GetActivityGroupName(activityInfo)
+  if type(activityInfo) ~= "table" then return "" end
+  local groupID = activityInfo.groupFinderActivityGroupID
   if groupID and C_LFGList and C_LFGList.GetActivityGroupInfo then
-    local ok, name = pcall(C_LFGList.GetActivityGroupInfo, groupID)
-    if ok and name then return name end
+    return SafeCFunction(C_LFGList.GetActivityGroupInfo, groupID) or ""
   end
-  return SafeActivityCall(activity, "GetName") or ""
+  return ""
 end
 
-local function BuildFilterLogLine(activity)
+local function BuildFilterLogLineFromSearchResult(resultID)
+  if not resultID or not C_LFGList or not C_LFGList.GetSearchResultInfo then return nil end
+  local info = SafeCFunction(C_LFGList.GetSearchResultInfo, resultID)
+  if type(info) ~= "table" then return nil end
+
+  local activityID = GetSearchResultActivityID(info)
+  local activityInfo = GetActivityInfo(activityID)
   local fields = {
     date("%H:%M:%S"),
-    GetActivityCategoryLabel(activity),
-    GetActivityTypeLabel(activity),
-    SafeActivityCall(activity, "GetName") or "",
-    SafeActivityCall(activity, "GetSummary") or "",
-    SafeActivityCall(activity, "GetLeader") or "",
-    SafeActivityCall(activity, "GetComment") or "",
+    GetActivityCategoryFromInfo(activityInfo),
+    GetActivityGroupName(activityInfo),
+    (activityInfo and (activityInfo.fullName or activityInfo.shortName)) or "",
+    info.name or "",
+    info.leaderName or "",
+    info.comment or "",
   }
 
   for i, value in ipairs(fields) do
     fields[i] = CleanLogValue(value)
   end
-  return table.concat(fields, "\t")
+  return table.concat(fields, "\t"), table.concat(fields, " | ")
 end
 
-local function AddFilterLogActivity(activity)
-  if not activity then return false end
-  local line = BuildFilterLogLine(activity)
-  local activityID = SafeActivityCall(activity, "GetID") or ""
-  local key = tostring(activityID) .. "\t" .. line
+local function AddFilterLogSearchResult(resultID)
+  local line, displayLine = BuildFilterLogLineFromSearchResult(resultID)
+  if not line or line == "" then return false end
+  local key = tostring(resultID) .. "\t" .. line
   if filterLogSeen[key] then return false end
 
   filterLogSeen[key] = true
   filterLogLines[#filterLogLines + 1] = line
+  filterLogDisplayLines[#filterLogDisplayLines + 1] = displayLine or line:gsub("\t", " | ")
   if #filterLogLines > filterLogLimit then
     local removed = table.remove(filterLogLines, 1)
+    table.remove(filterLogDisplayLines, 1)
     if removed then
       for seenKey in pairs(filterLogSeen) do
         if seenKey:find(removed, 1, true) then
@@ -142,11 +159,32 @@ local function AddFilterLogActivity(activity)
   return true
 end
 
-local function RecordFilterLogActivity(activity)
-  if not filterLogEnabled then return end
-  if AddFilterLogActivity(activity) then
-    ScheduleFilterLogChanged()
+local function RecordCurrentSearchResults()
+  if not filterLogEnabled or not C_LFGList or not C_LFGList.GetSearchResults then return end
+  local ok, _, results = pcall(C_LFGList.GetSearchResults)
+  if not ok then return end
+  if type(results) ~= "table" then return end
+
+  filterLogScanToken = filterLogScanToken + 1
+  local token = filterLogScanToken
+  local index = 1
+  local batchSize = 35
+
+  local function ScanBatch()
+    if token ~= filterLogScanToken or not filterLogEnabled then return end
+    local changed = false
+    local batchEnd = math.min(index + batchSize - 1, #results)
+    for i = index, batchEnd do
+      changed = AddFilterLogSearchResult(results[i]) or changed
+    end
+    if changed then ScheduleFilterLogChanged() end
+    index = batchEnd + 1
+    if index <= #results and C_Timer and C_Timer.After then
+      C_Timer.After(0, ScanBatch)
+    end
   end
+
+  ScanBatch()
 end
 
 local function NormalizeName(name)
@@ -390,10 +428,9 @@ end
 function MeetingStone.SetFilterLogEnabled(enabled)
   filterLogEnabled = enabled and true or false
   if filterLogEnabled then
-    local browsePanel = GetMeetingStoneValue("BrowsePanel") or _G.MeetingStone_BrowsePanel
-    if browsePanel and browsePanel.ActivityList and browsePanel.ActivityList.Refresh then
-      pcall(browsePanel.ActivityList.Refresh, browsePanel.ActivityList)
-    end
+    RecordCurrentSearchResults()
+  else
+    filterLogScanToken = filterLogScanToken + 1
   end
   NotifyFilterLogChanged()
 end
@@ -408,6 +445,13 @@ function MeetingStone.GetFilterLogText()
     return filterLogHeader
   end
   return filterLogHeader .. "\n" .. table.concat(filterLogLines, "\n")
+end
+
+function MeetingStone.GetFilterLogDisplayText()
+  if #filterLogDisplayLines == 0 then
+    return filterLogDisplayHeader
+  end
+  return filterLogDisplayHeader .. "\n" .. table.concat(filterLogDisplayLines, "\n")
 end
 
 function MeetingStone.GetFilterLogCount()
@@ -683,21 +727,6 @@ local function HookMainPanel()
   end
 end
 
-local function HookFilterLogList(list)
-  if not list or list.__RememberNoobFilterLogHooked then return end
-  list.__RememberNoobFilterLogHooked = true
-
-  local oldOnItemFormatted = list.events and list.events.OnItemFormatted
-  list:SetCallback("OnItemFormatted", function(view, button, activity, ...)
-    if oldOnItemFormatted then
-      oldOnItemFormatted(view, button, activity, ...)
-    elseif view and view.OnItemFormatted then
-      view:OnItemFormatted(button, activity)
-    end
-    RecordFilterLogActivity(activity)
-  end)
-end
-
 local function HookBrowsePanel()
   local BrowsePanel = GetMeetingStoneValue("BrowsePanel") or _G.MeetingStone_BrowsePanel
   if not BrowsePanel or BrowsePanel.__RememberNoobInitializeHooked or not BrowsePanel.OnInitialize then return end
@@ -708,7 +737,6 @@ local function HookBrowsePanel()
     oldOnInitialize(self, ...)
     PatchNoobIconHeader(self.ActivityList)
     PatchLeaderHeader(self.ActivityList)
-    HookFilterLogList(self.ActivityList)
   end
 end
 
@@ -750,8 +778,8 @@ local function HookBrowsePanelList()
   if BrowsePanel and BrowsePanel.ActivityList then
     PatchNoobIconHeader(BrowsePanel.ActivityList)
     PatchLeaderHeader(BrowsePanel.ActivityList)
-    HookFilterLogList(BrowsePanel.ActivityList)
   end
+  RecordCurrentSearchResults()
 end
 
 local function HookMeetingStone()
@@ -774,7 +802,13 @@ function MeetingStone.Initialize()
   local frame = CreateFrame("Frame")
   frame:RegisterEvent("ADDON_LOADED")
   frame:RegisterEvent("PLAYER_LOGIN")
+  frame:RegisterEvent("LFG_LIST_SEARCH_RESULTS_RECEIVED")
+  frame:RegisterEvent("LFG_LIST_SEARCH_RESULT_UPDATED")
   frame:SetScript("OnEvent", function(self, event, addonName)
+    if event == "LFG_LIST_SEARCH_RESULTS_RECEIVED" or event == "LFG_LIST_SEARCH_RESULT_UPDATED" then
+      RecordCurrentSearchResults()
+      return
+    end
     if event == "ADDON_LOADED" and addonName ~= "MeetingStone" then return end
     HookMeetingStone()
     C_Timer.After(0, HookMeetingStone)
