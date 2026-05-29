@@ -140,14 +140,12 @@ local function SetButtonNoobHighlight(button, enable, endButton)
 
   local shown = enable and GetSetting("highlightNoob") or false
   button.rememberNoobHighlight = shown
+  local startRegion = button.starTarget or button
+  local endRegion = (endButton and endButton.starTarget) or startRegion
 
   noobBg:ClearAllPoints()
-  noobBg:SetPoint("TOPLEFT", button, "TOPLEFT", 0, -1)
-  if endButton then
-    noobBg:SetPoint("BOTTOMRIGHT", endButton, "BOTTOMRIGHT", 0, 1)
-  else
-    noobBg:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", 0, 1)
-  end
+  noobBg:SetPoint("TOPLEFT", startRegion, "TOPLEFT", 0, -1)
+  noobBg:SetPoint("BOTTOMRIGHT", endRegion, "BOTTOMRIGHT", 0, 1)
   noobBg:SetColorTexture(0.85, 0.05, 0.05)
   noobBg:SetAlpha(0.28)
   noobBg:SetShown(shown)
@@ -430,24 +428,6 @@ local function PatchLeaderHeader(list)
   end
 end
 
-local function PatchApplicantNameHeader(list)
-  if not list or list.__RememberNoobNamePatched or type(list.sortButtons) ~= "table" then return end
-  for _, header in ipairs(list.sortButtons) do
-    if header.key == "Name" and header.showHandler then
-      local oldShowHandler = header.showHandler
-      header.showHandler = function(applicant)
-        local text, r, g, b = oldShowHandler(applicant)
-        if GetSetting("highlightNoob") and ApplicantHasNoob(applicant) then
-          return text, 1, 0.1, 0.1
-        end
-        return text, r, g, b
-      end
-      list.__RememberNoobNamePatched = true
-      return
-    end
-  end
-end
-
 local function HookApplicantPanel()
   local ApplicantPanel = GetMeetingStoneValue("ApplicantPanel")
   local ManagerPanel = GetMeetingStoneValue("ManagerPanel")
@@ -575,7 +555,6 @@ local function HookApplicantPanelList()
   if not ApplicantPanel then return end
   if ApplicantPanel.ApplicantList then
     PatchNoobIconHeader(ApplicantPanel.ApplicantList, "starTarget")
-    PatchApplicantNameHeader(ApplicantPanel.ApplicantList)
 
     local list = ApplicantPanel.ApplicantList
     if type(list.buttons) == "table" then
