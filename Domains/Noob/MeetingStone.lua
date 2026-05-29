@@ -156,16 +156,46 @@ local function SetRejectButtonState(panel)
   end
 end
 
+local function SkinRejectButton(button)
+  if not button or button.__RememberNoobSkinned then return end
+
+  local elv = _G.ElvUI and _G.ElvUI[1]
+  local elvSkins = elv and elv.GetModule and elv:GetModule("Skins", true)
+  if elvSkins and elvSkins.ESProxy then
+    pcall(elvSkins.ESProxy, elvSkins, "HandleButton", button, nil, nil, nil, true, "Transparent")
+    if button.backdrop and button.backdrop.ClearAllPoints and button.backdrop.SetOutside then
+      button.backdrop:ClearAllPoints()
+      button.backdrop:SetOutside(button, -1, -2)
+    end
+    button.__RememberNoobSkinned = true
+    return
+  end
+
+  local nd = _G.NDui
+  local ndSkin = nd and nd[1]
+  if ndSkin and ndSkin.Reskin then
+    pcall(ndSkin.Reskin, button)
+    button.__RememberNoobSkinned = true
+    return
+  end
+
+  button.__RememberNoobSkinned = true
+end
+
 local function CreateRejectButton(applicantPanel, managerPanel)
   if not applicantPanel or not managerPanel or applicantPanel.RememberNoobRejectButton then return end
   if not managerPanel.RefreshButton then return end
 
-  local button = CreateFrame("Button", nil, managerPanel, "UIMenuButtonStretchTemplate")
-  button:SetSize(90, 20)
+  local RefreshButton = GetMeetingStoneClass("RefreshButton")
+  local button = RefreshButton and RefreshButton.New and RefreshButton:New(managerPanel) or
+    CreateFrame("Button", nil, managerPanel, "UIMenuButtonStretchTemplate")
+
+  button:SetSize(92, 28)
   button:SetPoint("TOPRIGHT", managerPanel.RefreshButton, "TOPLEFT", -6, 0)
   button:SetNormalFontObject("GameFontNormal")
   button:SetHighlightFontObject("GameFontHighlight")
   button:SetDisabledFontObject("GameFontDisable")
+  if button.Icon then button.Icon:Hide() end
   button:SetScript("OnClick", function()
     if applicantPanel.DeclineRememberNoobs then
       applicantPanel:DeclineRememberNoobs()
@@ -174,6 +204,7 @@ local function CreateRejectButton(applicantPanel, managerPanel)
 
   applicantPanel.RememberNoobRejectButton = button
   managerPanel.RememberNoobRejectButton = button
+  SkinRejectButton(button)
   SetRejectButtonState(applicantPanel)
 end
 
