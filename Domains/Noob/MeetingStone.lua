@@ -5,6 +5,30 @@ ns.RememberNoobMeetingStone = MeetingStone
 
 local hooked = false
 
+local function GetMeetingStoneEnv()
+  local ok, env = pcall(function()
+    local lib = LibStub and LibStub("NetEaseEnv-1.0", true)
+    return lib and lib._NSList and lib._NSList.MeetingStone
+  end)
+  if ok then return env end
+end
+
+local function GetMeetingStoneValue(key)
+  local env = GetMeetingStoneEnv()
+  return (env and env[key]) or _G[key]
+end
+
+local function GetMeetingStoneAddon()
+  return GetMeetingStoneValue("Addon")
+end
+
+local function GetMeetingStoneClass(className)
+  local addon = GetMeetingStoneAddon()
+  if addon and addon.GetClass then
+    return addon:GetClass(className)
+  end
+end
+
 local function GetSetting(key)
   if ns.Config and ns.Config.Get then
     return ns.Config.Get("meetingStone." .. key) == true
@@ -77,15 +101,59 @@ local function ActivityHasNoobLeader(activity)
   return GetNoobRecord(activity:GetLeader()) ~= nil
 end
 
+local function SetRejectButtonState(panel)
+  if not panel or not panel.RememberNoobRejectButton then return end
+  if GetSetting("enableOneClickReject") then
+    panel.RememberNoobRejectButton:Show()
+  else
+    panel.RememberNoobRejectButton:Hide()
+  end
+end
+
+local function ApplyOperationNoobIcon(grid)
+  if not grid or not grid.RememberNoobLogo then return end
+  if not GetSetting("showIcon") then
+    grid.RememberNoobLogo:Hide()
+  elseif grid.RememberNoobLogo.isRememberNoob then
+    grid.RememberNoobLogo:Show()
+  end
+end
+
 local function RefreshMeetingStone()
-  if _G.ApplicantPanel and ApplicantPanel.UpdateRememberNoobRejectButton then
-    pcall(ApplicantPanel.UpdateRememberNoobRejectButton, ApplicantPanel)
+  local applicantPanel = GetMeetingStoneValue("ApplicantPanel")
+  local managerPanel = GetMeetingStoneValue("ManagerPanel")
+  local browsePanel = GetMeetingStoneValue("BrowsePanel") or _G.MeetingStone_BrowsePanel
+
+  if applicantPanel and applicantPanel.UpdateRememberNoobRejectButton then
+    pcall(applicantPanel.UpdateRememberNoobRejectButton, applicantPanel)
   end
-  if _G.ApplicantPanel and ApplicantPanel.UpdateApplicantsList then
-    pcall(ApplicantPanel.UpdateApplicantsList, ApplicantPanel)
+  SetRejectButtonState(applicantPanel)
+  SetRejectButtonState(managerPanel)
+
+  if applicantPanel and applicantPanel.UpdateApplicantsList then
+    pcall(applicantPanel.UpdateApplicantsList, applicantPanel)
   end
-  if _G.BrowsePanel and BrowsePanel.ActivityList and BrowsePanel.ActivityList.Refresh then
-    pcall(BrowsePanel.ActivityList.Refresh, BrowsePanel.ActivityList)
+  SetRejectButtonState(applicantPanel)
+  SetRejectButtonState(managerPanel)
+
+  if browsePanel and browsePanel.ActivityList and browsePanel.ActivityList.Refresh then
+    pcall(browsePanel.ActivityList.Refresh, browsePanel.ActivityList)
+  end
+
+  local applicantList = applicantPanel and applicantPanel.ApplicantList
+  if applicantList and applicantList.Refresh then
+    pcall(applicantList.Refresh, applicantList)
+  end
+
+  if applicantList and type(applicantList.buttons) == "table" then
+    for _, button in ipairs(applicantList.buttons) do
+      if button and button.Option then
+        ApplyOperationNoobIcon(button.Option)
+      end
+      if button and button.noobBg and not GetSetting("highlightNoob") then
+        button.noobBg:Hide()
+      end
+    end
   end
 end
 
@@ -94,7 +162,7 @@ function MeetingStone.Refresh()
 end
 
 local function HookApplicantClass()
-  local Applicant = _G.Applicant
+  local Applicant = GetMeetingStoneValue("Applicant")
   if not Applicant or Applicant.__RememberNoobHooked then return end
   Applicant.__RememberNoobHooked = true
 
@@ -135,7 +203,7 @@ local function HookApplicantClass()
 end
 
 local function HookActivityClass()
-  local Activity = _G.Activity
+  local Activity = GetMeetingStoneValue("Activity")
   if not Activity or Activity.__RememberNoobHooked then return end
   Activity.__RememberNoobHooked = true
 
@@ -145,18 +213,41 @@ local function HookActivityClass()
 end
 
 local function HookApplicantItem()
-  local Addon = _G.Addon
-  local ApplicantItem = Addon and Addon.GetClass and Addon:GetClass("ApplicantItem")
-  if not ApplicantItem or ApplicantItem.__RememberNoobHooked then return end
-  ApplicantItem.__RememberNoobHooked = true
+  local ApplicantItem = GetMeetingStoneClass("ApplicantItem")
+  if not ApplicantItem or ApplicantItem.__RememberNoobSetHighlightHooked or not ApplicantItem.SetRememberNoobHighlight then return end
+  ApplicantItem.__RememberNoobSetHighlightHooked = true
 
   local oldSetRememberNoobHighlight = ApplicantItem.SetRememberNoobHighlight
   function ApplicantItem:SetRememberNoobHighlight(enable)
-    if oldSetRememberNoobHighlight then
-      oldSetRememberNoobHighlight(self, enable and GetSetting("highlightNoob"))
-    elseif self.noobBg then
-      self.noobBg:SetShown(enable and GetSetting("highlightNoob"))
+    oldSetRememberNoobHighlight(self, enable and GetSetting("highlightNoob"))
+    if self.noobBg and not GetSetting("highlightNoob") then
+      self.noobBg:Hide()
     end
+  end
+end
+
+local function HookOperationGrid()
+  local OperationGrid = GetMeetingStoneClass("OperationGrid")
+  if not OperationGrid or OperationGrid.__RememberNoobOperationHooked then return end
+  if not OperationGrid.SetMember or not OperationGrid.SetSpinner or not OperationGrid.SetText then return end
+  OperationGrid.__RememberNoobOperationHooked = true
+
+  local oldSetMember = OperationGrid.SetMember
+  function OperationGrid:SetMember(...)
+    oldSetMember(self, ...)
+    ApplyOperationNoobIcon(self)
+  end
+
+  local oldSetSpinner = OperationGrid.SetSpinner
+  function OperationGrid:SetSpinner(...)
+    oldSetSpinner(self, ...)
+    ApplyOperationNoobIcon(self)
+  end
+
+  local oldSetText = OperationGrid.SetText
+  function OperationGrid:SetText(...)
+    oldSetText(self, ...)
+    ApplyOperationNoobIcon(self)
   end
 end
 
@@ -216,33 +307,41 @@ local function PatchApplicantNameHeader(list)
 end
 
 local function HookApplicantPanel()
-  if not _G.ApplicantPanel or ApplicantPanel.__RememberNoobHooked then return end
-  ApplicantPanel.__RememberNoobHooked = true
+  local ApplicantPanel = GetMeetingStoneValue("ApplicantPanel")
+  local ManagerPanel = GetMeetingStoneValue("ManagerPanel")
+  if not ApplicantPanel then return end
 
-  local oldUpdateRejectButton = ApplicantPanel.UpdateRememberNoobRejectButton
-  function ApplicantPanel:UpdateRememberNoobRejectButton()
-    if oldUpdateRejectButton then oldUpdateRejectButton(self) end
-    if self.RememberNoobRejectButton and not GetSetting("enableOneClickReject") then
-      self.RememberNoobRejectButton:Hide()
+  if ApplicantPanel.UpdateRememberNoobRejectButton and not ApplicantPanel.__RememberNoobUpdateRejectHooked then
+    ApplicantPanel.__RememberNoobUpdateRejectHooked = true
+    local oldUpdateRejectButton = ApplicantPanel.UpdateRememberNoobRejectButton
+    function ApplicantPanel:UpdateRememberNoobRejectButton()
+      oldUpdateRejectButton(self)
+      SetRejectButtonState(self)
+      SetRejectButtonState(ManagerPanel)
     end
   end
 
-  local oldDeclineRememberNoobs = ApplicantPanel.DeclineRememberNoobs
-  function ApplicantPanel:DeclineRememberNoobs()
-    if not GetSetting("enableOneClickReject") then return end
-    if oldDeclineRememberNoobs then oldDeclineRememberNoobs(self) end
+  if ApplicantPanel.DeclineRememberNoobs and not ApplicantPanel.__RememberNoobDeclineHooked then
+    ApplicantPanel.__RememberNoobDeclineHooked = true
+    local oldDeclineRememberNoobs = ApplicantPanel.DeclineRememberNoobs
+    function ApplicantPanel:DeclineRememberNoobs()
+      if not GetSetting("enableOneClickReject") then return end
+      oldDeclineRememberNoobs(self)
+    end
   end
+
+  SetRejectButtonState(ApplicantPanel)
+  SetRejectButtonState(ManagerPanel)
 end
 
 local function HookMainPanel()
-  if not _G.MainPanel or MainPanel.__RememberNoobHooked then return end
-  MainPanel.__RememberNoobHooked = true
+  local MainPanel = GetMeetingStoneValue("MainPanel")
+  if not MainPanel or MainPanel.__RememberNoobActivityTooltipHooked or not MainPanel.OpenActivityTooltip then return end
+  MainPanel.__RememberNoobActivityTooltipHooked = true
 
   local oldOpenActivityTooltip = MainPanel.OpenActivityTooltip
   function MainPanel:OpenActivityTooltip(activity, tooltip)
-    if oldOpenActivityTooltip then
-      oldOpenActivityTooltip(self, activity, tooltip)
-    end
+    oldOpenActivityTooltip(self, activity, tooltip)
     local targetTooltip = tooltip or self.GameTooltip
     if activity and activity.GetLeader then
       local record, cleanName = GetNoobRecord(activity:GetLeader())
@@ -255,19 +354,21 @@ local function HookMainPanel()
 end
 
 local function HookBrowsePanel()
-  if not _G.BrowsePanel or BrowsePanel.__RememberNoobHooked then return end
-  BrowsePanel.__RememberNoobHooked = true
+  local BrowsePanel = GetMeetingStoneValue("BrowsePanel") or _G.MeetingStone_BrowsePanel
+  if not BrowsePanel or BrowsePanel.__RememberNoobInitializeHooked or not BrowsePanel.OnInitialize then return end
+  BrowsePanel.__RememberNoobInitializeHooked = true
 
   local oldOnInitialize = BrowsePanel.OnInitialize
   function BrowsePanel:OnInitialize(...)
-    if oldOnInitialize then oldOnInitialize(self, ...) end
+    oldOnInitialize(self, ...)
     PatchNoobIconHeader(self.ActivityList)
     PatchLeaderHeader(self.ActivityList)
   end
 end
 
 local function HookApplicantPanelList()
-  if not _G.ApplicantPanel then return end
+  local ApplicantPanel = GetMeetingStoneValue("ApplicantPanel")
+  if not ApplicantPanel then return end
   if ApplicantPanel.ApplicantList then
     PatchNoobIconHeader(ApplicantPanel.ApplicantList)
     PatchApplicantNameHeader(ApplicantPanel.ApplicantList)
@@ -278,7 +379,8 @@ local function HookApplicantPanelList()
 end
 
 local function HookBrowsePanelList()
-  if _G.BrowsePanel and BrowsePanel.ActivityList then
+  local BrowsePanel = GetMeetingStoneValue("BrowsePanel") or _G.MeetingStone_BrowsePanel
+  if BrowsePanel and BrowsePanel.ActivityList then
     PatchNoobIconHeader(BrowsePanel.ActivityList)
     PatchLeaderHeader(BrowsePanel.ActivityList)
   end
@@ -288,6 +390,7 @@ local function HookMeetingStone()
   HookApplicantClass()
   HookActivityClass()
   HookApplicantItem()
+  HookOperationGrid()
   HookApplicantPanel()
   HookMainPanel()
   HookBrowsePanel()
