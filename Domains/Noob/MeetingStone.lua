@@ -472,6 +472,17 @@ local function HookApplicantPanel()
     end
   end
 
+  if ApplicantPanel.UpdateApplicantsList and not ApplicantPanel.__RememberNoobUpdateApplicantsHooked then
+    ApplicantPanel.__RememberNoobUpdateApplicantsHooked = true
+    local oldUpdateApplicantsList = ApplicantPanel.UpdateApplicantsList
+    function ApplicantPanel:UpdateApplicantsList(...)
+      oldUpdateApplicantsList(self, ...)
+      if self.UpdateRememberNoobRejectButton then
+        self:UpdateRememberNoobRejectButton()
+      end
+    end
+  end
+
   if not ApplicantPanel.__RememberNoobDeclineHooked then
     ApplicantPanel.__RememberNoobDeclineHooked = true
     local oldDeclineRememberNoobs = ApplicantPanel.DeclineRememberNoobs
