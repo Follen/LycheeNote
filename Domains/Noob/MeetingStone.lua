@@ -8,7 +8,8 @@ local filterLogEnabled = false
 local filterLogLines = {}
 local filterLogSeen = {}
 local filterLogHeader = "时间\t活动分类\t活动类型\t活动名称\t活动标题\t团长\t说明"
-local filterLogLimit = 2000
+local filterLogLimit = 500
+local filterLogNotifyPending = false
 
 local function GetMeetingStoneEnv()
   local ok, env = pcall(function()
@@ -44,6 +45,20 @@ end
 local function NotifyFilterLogChanged()
   if ns.RememberNoobUI and ns.RememberNoobUI.RefreshDebugLogPanel then
     ns.RememberNoobUI.RefreshDebugLogPanel()
+  end
+end
+
+local function ScheduleFilterLogChanged()
+  if filterLogNotifyPending then return end
+  filterLogNotifyPending = true
+  if C_Timer and C_Timer.After then
+    C_Timer.After(0.1, function()
+      filterLogNotifyPending = false
+      NotifyFilterLogChanged()
+    end)
+  else
+    filterLogNotifyPending = false
+    NotifyFilterLogChanged()
   end
 end
 
@@ -127,32 +142,11 @@ local function AddFilterLogActivity(activity)
   return true
 end
 
-local function RecordFilterLogFromList(list)
-  local changed = false
-  for _, activity in ipairs(list or {}) do
-    changed = AddFilterLogActivity(activity) or changed
-  end
-  return changed
-end
-
-local function RecordMeetingStoneFilterLog()
+local function RecordFilterLogActivity(activity)
   if not filterLogEnabled then return end
-
-  local changed = false
-  local browsePanel = GetMeetingStoneValue("BrowsePanel") or _G.MeetingStone_BrowsePanel
-  local lfgService = GetMeetingStoneValue("LfgService")
-
-  if browsePanel and browsePanel.ActivityList and browsePanel.ActivityList.GetItemList then
-    changed = RecordFilterLogFromList(browsePanel.ActivityList:GetItemList()) or changed
+  if AddFilterLogActivity(activity) then
+    ScheduleFilterLogChanged()
   end
-  if lfgService and lfgService.GetActivityList then
-    changed = RecordFilterLogFromList(lfgService:GetActivityList()) or changed
-  end
-  if lfgService and lfgService.GetActivityDealList then
-    changed = RecordFilterLogFromList(lfgService:GetActivityDealList()) or changed
-  end
-
-  if changed then NotifyFilterLogChanged() end
 end
 
 local function NormalizeName(name)
@@ -396,7 +390,10 @@ end
 function MeetingStone.SetFilterLogEnabled(enabled)
   filterLogEnabled = enabled and true or false
   if filterLogEnabled then
-    RecordMeetingStoneFilterLog()
+    local browsePanel = GetMeetingStoneValue("BrowsePanel") or _G.MeetingStone_BrowsePanel
+    if browsePanel and browsePanel.ActivityList and browsePanel.ActivityList.Refresh then
+      pcall(browsePanel.ActivityList.Refresh, browsePanel.ActivityList)
+    end
   end
   NotifyFilterLogChanged()
 end
@@ -686,6 +683,21 @@ local function HookMainPanel()
   end
 end
 
+local function HookFilterLogList(list)
+  if not list or list.__RememberNoobFilterLogHooked then return end
+  list.__RememberNoobFilterLogHooked = true
+
+  local oldOnItemFormatted = list.events and list.events.OnItemFormatted
+  list:SetCallback("OnItemFormatted", function(view, button, activity, ...)
+    if oldOnItemFormatted then
+      oldOnItemFormatted(view, button, activity, ...)
+    elseif view and view.OnItemFormatted then
+      view:OnItemFormatted(button, activity)
+    end
+    RecordFilterLogActivity(activity)
+  end)
+end
+
 local function HookBrowsePanel()
   local BrowsePanel = GetMeetingStoneValue("BrowsePanel") or _G.MeetingStone_BrowsePanel
   if not BrowsePanel or BrowsePanel.__RememberNoobInitializeHooked or not BrowsePanel.OnInitialize then return end
@@ -696,28 +708,7 @@ local function HookBrowsePanel()
     oldOnInitialize(self, ...)
     PatchNoobIconHeader(self.ActivityList)
     PatchLeaderHeader(self.ActivityList)
-  end
-end
-
-local function HookLfgService()
-  local LfgService = GetMeetingStoneValue("LfgService")
-  if not LfgService or LfgService.__RememberNoobFilterLogHooked then return end
-  LfgService.__RememberNoobFilterLogHooked = true
-
-  if LfgService.LFG_LIST_SEARCH_RESULTS_RECEIVED then
-    local oldSearchResultsReceived = LfgService.LFG_LIST_SEARCH_RESULTS_RECEIVED
-    function LfgService:LFG_LIST_SEARCH_RESULTS_RECEIVED(...)
-      oldSearchResultsReceived(self, ...)
-      RecordMeetingStoneFilterLog()
-    end
-  end
-
-  if LfgService.LFG_LIST_SEARCH_RESULT_UPDATED then
-    local oldSearchResultUpdated = LfgService.LFG_LIST_SEARCH_RESULT_UPDATED
-    function LfgService:LFG_LIST_SEARCH_RESULT_UPDATED(...)
-      oldSearchResultUpdated(self, ...)
-      RecordMeetingStoneFilterLog()
-    end
+    HookFilterLogList(self.ActivityList)
   end
 end
 
@@ -759,6 +750,7 @@ local function HookBrowsePanelList()
   if BrowsePanel and BrowsePanel.ActivityList then
     PatchNoobIconHeader(BrowsePanel.ActivityList)
     PatchLeaderHeader(BrowsePanel.ActivityList)
+    HookFilterLogList(BrowsePanel.ActivityList)
   end
 end
 
@@ -767,7 +759,6 @@ local function HookMeetingStone()
   HookActivityClass()
   HookApplicantItem()
   HookOperationGrid()
-  HookLfgService()
   HookApplicantPanel()
   HookMainPanel()
   HookBrowsePanel()
