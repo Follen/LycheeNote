@@ -750,18 +750,18 @@ function UI.RefreshDebugLogPanel()
     panel.editBox:SetText(text)
     panel.editBox:SetCursorPosition(0)
     if panel.logBg and panel.editBox.GetStringHeight then
-      panel.logBg:SetHeight(math.max(338, math.ceil(panel.editBox:GetStringHeight() + 20)))
+      panel.logBg:SetHeight(math.max(316, math.ceil(panel.editBox:GetStringHeight() + 20)))
     end
   end
 end
 
 function UI.CreateDebugPanel(panel)
-  CreatePageTitle(panel, "调试")
+  local titleText = CreatePageTitle(panel, "调试")
 
   local logButton = Controls and Controls.CreateButton and
     Controls.CreateButton(panel, "开启集合石过滤日志", 150, 28)
   if logButton and logButton.SetPoint then
-    logButton:SetPoint("TOPRIGHT", panel, "TOPRIGHT", 0, -2)
+    logButton:SetPoint("TOPRIGHT", titleText or panel, titleText and "BOTTOMRIGHT" or "TOPRIGHT", 0, -18)
   end
 
   local countText = Controls and Controls.CreateText and
@@ -771,12 +771,12 @@ function UI.CreateDebugPanel(panel)
   end
 
   local scrollFrame = CreateFrame("ScrollFrame", nil, panel, "UIPanelScrollFrameTemplate")
-  scrollFrame:SetPoint("TOPLEFT", panel, "TOPLEFT", 0, -54)
-  scrollFrame:SetSize(640, 338)
+  scrollFrame:SetPoint("TOPLEFT", titleText or panel, titleText and "BOTTOMLEFT" or "TOPLEFT", 0, -60)
+  scrollFrame:SetSize(640, 316)
   StyleScrollBar(scrollFrame)
 
   local logBg = CreateFrame("Frame", nil, scrollFrame, "BackdropTemplate")
-  logBg:SetSize(622, 338)
+  logBg:SetSize(622, 316)
   logBg:SetBackdrop({
     bgFile = "Interface\\Buttons\\WHITE8x8",
     edgeFile = "Interface\\Buttons\\WHITE8x8",
@@ -790,7 +790,10 @@ function UI.CreateDebugPanel(panel)
   editBox:SetPoint("BOTTOMRIGHT", logBg, "BOTTOMRIGHT", -8, 8)
   editBox:SetMultiLine(true)
   editBox:SetAutoFocus(false)
-  editBox:SetFontObject("ChatFontNormal")
+  editBox:SetFont("Fonts\\ARKai_T.ttf", 13, "")
+  editBox:SetTextColor(0.92, 0.92, 0.95, 1)
+  editBox:SetJustifyH("LEFT")
+  editBox:SetJustifyV("TOP")
   editBox:SetMaxLetters(200000)
   editBox:SetCursorPosition(0)
   editBox:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
