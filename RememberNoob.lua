@@ -1,0 +1,3 @@
+local ADDON_NAME, ns = ...
+
+ns.addonName = ADDON_NAME

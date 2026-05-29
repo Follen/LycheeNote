@@ -1,0 +1,20 @@
+## Interface: 120005
+## Title: 记住笨蛋
+## Notes: 记录你在团本大秘境遇到的笨蛋
+## Author: 晴昼秋岚#5278
+## Version: 1.0.1
+## SavedVariables: RememberNoobDB
+
+Shared\Style.lua
+Shared\Controls.lua
+
+Core\Init.lua
+Core\Addon.lua
+Core\Config.lua
+
+Domains\Noob\Noob.lua
+Domains\Noob\Events.lua
+Domains\Noob\Inspect.lua
+Domains\Noob\Menu.lua
+Domains\Noob\UI.lua
+Domains\Noob\Dialogs.lua
