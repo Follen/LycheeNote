@@ -229,6 +229,13 @@ local function AddFilterLogActivity(activity)
   return true
 end
 
+local function ResetFilterLog()
+  table.wipe(filterLogLines)
+  table.wipe(filterLogDisplayLines)
+  table.wipe(filterLogSeen)
+  debugLogStatus = "待搜索"
+end
+
 local function RecordCurrentSearchResults()
   if not filterLogEnabled then return end
   local lfgService = GetMeetingStoneValue("LfgService")
@@ -316,6 +323,8 @@ function MeetingStone.SearchDebugCategory(categoryOrItem, baseFilter)
   local item = type(categoryOrItem) == "table" and categoryOrItem or nil
   local categoryID = item and item.categoryID or categoryOrItem
   local label = item and item.text or tostring(categoryID)
+
+  ResetFilterLog()
 
   if item and item.searchPlan and type(item.searchPlan) == "table" then
     StartDebugSearch(item.searchPlan, "搜索中: " .. label)

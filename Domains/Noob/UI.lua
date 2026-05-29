@@ -860,14 +860,16 @@ function UI.RefreshDebugLogPanel()
   local contentHeight = math.max(316, lineCount * 16 + 20)
 
   if panel.logText then
-    panel.logText:SetText("")
-    panel.logText:Hide()
+    panel.logText:SetText(text)
+    panel.logText:SetHeight(contentHeight - 16)
+    panel.logText:Show()
   end
   if panel.copyBox then
     panel.copyBox:SetText(text)
     panel.copyBox:SetCursorPosition(0)
     panel.copyBox:SetHeight(contentHeight - 16)
     panel.copyBox:Show()
+    panel.copyBox:SetAlpha(0.01)
   end
   if panel.logBg then
     panel.logBg:SetHeight(contentHeight)
@@ -911,7 +913,7 @@ local function UpdateDebugLogHeight(panel)
     lineCount = lineCount + 1
   end
   local contentHeight = math.max(316, lineCount * 16 + 20)
-  if panel.logText then panel.logText:Hide() end
+  if panel.logText then panel.logText:SetHeight(contentHeight - 16) end
   panel.copyBox:SetHeight(contentHeight - 16)
   if panel.logBg then
     panel.logBg:SetHeight(contentHeight)
@@ -966,7 +968,6 @@ function UI.CreateDebugPanel(panel)
   logText:SetJustifyV("TOP")
   logText:SetWordWrap(false)
   SetColor(logText, "SetTextColor", {0.92, 0.92, 0.95, 1})
-  logText:Hide()
 
   local copyBox = CreateFrame("EditBox", nil, logBg)
   copyBox:SetPoint("TOPLEFT", logBg, "TOPLEFT", 8, -8)
@@ -977,6 +978,7 @@ function UI.CreateDebugPanel(panel)
   copyBox:SetTextColor(0.92, 0.92, 0.95, 1)
   copyBox:SetWidth(606)
   copyBox:SetMaxLetters(500000)
+  copyBox:SetAlpha(0.01)
   copyBox:SetJustifyH("LEFT")
   copyBox:SetJustifyV("TOP")
   copyBox:SetScript("OnTextChanged", function()
@@ -986,11 +988,13 @@ function UI.CreateDebugPanel(panel)
 
   if logButton and logButton.SetScript then
     logButton:SetScript("OnClick", function()
+      local wasEnabled = ns.RememberNoobMeetingStone and ns.RememberNoobMeetingStone.IsFilterLogEnabled and
+        ns.RememberNoobMeetingStone.IsFilterLogEnabled()
       if ns.RememberNoobMeetingStone and ns.RememberNoobMeetingStone.ToggleFilterLog then
         ns.RememberNoobMeetingStone.ToggleFilterLog()
       end
       local item = categoryDropdown and categoryDropdown.GetItem and categoryDropdown:GetItem()
-      if item and ns.RememberNoobMeetingStone and ns.RememberNoobMeetingStone.SearchDebugCategory then
+      if not wasEnabled and item and ns.RememberNoobMeetingStone and ns.RememberNoobMeetingStone.SearchDebugCategory then
         ns.RememberNoobMeetingStone.SearchDebugCategory(item)
       end
       UI.RefreshDebugLogPanel()
