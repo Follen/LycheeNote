@@ -925,12 +925,102 @@ end
 local function SelectDebugLog(panel)
   if not panel or not panel.copyBox then return end
   UI.RefreshDebugLogPanel()
-  panel.copyBox:Show()
-  panel.copyBox:EnableMouse(true)
-  panel.copyBox:SetEnabled(true)
-  panel.copyBox:SetFocus()
-  panel.copyBox:HighlightText()
+  if UI.ShowDebugLogCopyFrame then
+    UI.ShowDebugLogCopyFrame(panel.copyBox:GetText() or "")
+    return
+  end
   print("|cff00ff00RememberNoob: 已全选 Lua 数据，按 Ctrl+C 复制|r")
+end
+
+function UI.ShowDebugLogCopyFrame(text)
+  if not UI.debugLogCopyFrame then
+    local frame = CreateFrame("Frame", "RememberNoobDebugLogCopyFrame", UIParent, "BackdropTemplate")
+    frame:SetSize(720, 500)
+    frame:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
+    frame:SetFrameStrata("FULLSCREEN_DIALOG")
+    frame:SetFrameLevel(200)
+    frame:EnableMouse(true)
+    ApplyPanelBackdrop(frame)
+
+    local title = Controls and Controls.CreateText and
+      Controls.CreateText(frame, "复制 Lua 数据", "GameFontNormalLarge", "VALUE_COLOR")
+    if title then
+      title:SetPoint("TOPLEFT", frame, "TOPLEFT", 18, -16)
+    end
+
+    local closeButton = Controls and Controls.CreateButton and
+      Controls.CreateButton(frame, "关闭", 78, 28)
+    if closeButton then
+      closeButton:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -14, -12)
+      closeButton:SetScript("OnClick", function()
+        frame:Hide()
+      end)
+    end
+
+    local selectButton = Controls and Controls.CreateButton and
+      Controls.CreateButton(frame, "全选", 78, 28)
+    if selectButton then
+      selectButton:SetPoint("RIGHT", closeButton, "LEFT", -8, 0)
+    end
+
+    local scrollFrame = CreateFrame("ScrollFrame", nil, frame, "UIPanelScrollFrameTemplate")
+    scrollFrame:SetPoint("TOPLEFT", frame, "TOPLEFT", 18, -56)
+    scrollFrame:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -34, 18)
+    StyleScrollBar(scrollFrame)
+
+    local bg = CreateFrame("Frame", nil, scrollFrame, "BackdropTemplate")
+    bg:SetSize(650, 410)
+    bg:SetBackdrop({
+      bgFile = "Interface\\Buttons\\WHITE8x8",
+      edgeFile = "Interface\\Buttons\\WHITE8x8",
+      edgeSize = 1,
+    })
+    SetColor(bg, "SetBackdropColor", {0.08, 0.08, 0.10, 0.96})
+    SetColor(bg, "SetBackdropBorderColor", {0.22, 0.22, 0.26, 0.70})
+
+    local editBox = CreateFrame("EditBox", nil, bg)
+    editBox:SetPoint("TOPLEFT", bg, "TOPLEFT", 10, -10)
+    editBox:SetPoint("BOTTOMRIGHT", bg, "BOTTOMRIGHT", -10, 10)
+    editBox:SetMultiLine(true)
+    editBox:SetAutoFocus(false)
+    editBox:SetFontObject("ChatFontNormal")
+    editBox:SetTextColor(0.92, 0.92, 0.95, 1)
+    editBox:SetMaxLetters(800000)
+    editBox:SetJustifyH("LEFT")
+    editBox:SetJustifyV("TOP")
+    editBox:SetScript("OnEscapePressed", function(self)
+      self:ClearFocus()
+      frame:Hide()
+    end)
+    editBox:SetScript("OnEditFocusGained", function(self)
+      self:HighlightText()
+    end)
+    scrollFrame:SetScrollChild(bg)
+
+    if selectButton then
+      selectButton:SetScript("OnClick", function()
+        editBox:SetFocus()
+        editBox:HighlightText()
+      end)
+    end
+
+    frame.editBox = editBox
+    frame.bg = bg
+    UI.debugLogCopyFrame = frame
+  end
+
+  local frame = UI.debugLogCopyFrame
+  frame:Show()
+  frame.editBox:SetText(text or "")
+  frame.editBox:SetCursorPosition(0)
+  local lineCount = 1
+  for _ in string.gmatch(text or "", "\n") do
+    lineCount = lineCount + 1
+  end
+  frame.bg:SetHeight(math.max(410, lineCount * 16 + 24))
+  frame.editBox:SetFocus()
+  frame.editBox:HighlightText()
+  print("|cff00ff00RememberNoob: 已打开 Lua 数据复制框，按 Ctrl+C 复制|r")
 end
 
 local function UpdateDebugLogHeight(panel)
