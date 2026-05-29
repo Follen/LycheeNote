@@ -2,7 +2,7 @@
 ## Title: 记住笨蛋
 ## Notes: 记录你在团本大秘境遇到的笨蛋
 ## Author: 晴昼秋岚#5278
-## Version: 1.0.1
+## Version: 1.0.3
 ## SavedVariables: RememberNoobDB
 
 Shared\Style.lua
