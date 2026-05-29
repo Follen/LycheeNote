@@ -869,6 +869,23 @@ function UI.RefreshDebugLogPanel()
       panel.logRows[i]:Hide()
     end
   end
+  if panel.logBg and type(rows) == "table" then
+    panel.logRows = panel.logRows or {}
+    for i, line in ipairs(rows) do
+      local row = panel.logRows[i]
+      if not row then
+        row = panel.logBg:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        row:SetJustifyH("LEFT")
+        row:SetWordWrap(false)
+        row:SetWidth(600)
+        SetColor(row, "SetTextColor", {0.92, 0.92, 0.95, 1})
+        panel.logRows[i] = row
+      end
+      row:SetPoint("TOPLEFT", panel.logBg, "TOPLEFT", 8, -8 - (i - 1) * 16)
+      row:SetText(line)
+      row:Show()
+    end
+  end
   if panel.logText then
     panel.logText:SetText("")
     panel.logText:Hide()
@@ -878,7 +895,7 @@ function UI.RefreshDebugLogPanel()
     panel.copyBox:SetCursorPosition(0)
     panel.copyBox:SetHeight(contentHeight - 16)
     panel.copyBox:Show()
-    panel.copyBox:SetAlpha(1)
+    panel.copyBox:SetAlpha(0.01)
   end
   if panel.logBg then
     panel.logBg:SetHeight(contentHeight)
@@ -909,7 +926,7 @@ local function SelectDebugLog(panel)
   UI.RefreshDebugLogPanel()
   if panel.copyBox then
     panel.copyBox:Show()
-    panel.copyBox:SetAlpha(1)
+    panel.copyBox:SetAlpha(0.01)
     panel.copyBox:EnableMouse(true)
     panel.copyBox:SetEnabled(true)
     panel.copyBox:SetFocus()
@@ -1112,7 +1129,7 @@ function UI.CreateDebugPanel(panel)
   copyBox:SetTextColor(0.92, 0.92, 0.95, 1)
   copyBox:SetWidth(606)
   copyBox:SetMaxLetters(500000)
-  copyBox:SetAlpha(1)
+  copyBox:SetAlpha(0.01)
   copyBox:SetJustifyH("LEFT")
   copyBox:SetJustifyV("TOP")
   copyBox:SetScript("OnTextChanged", function()
