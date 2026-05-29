@@ -9,6 +9,9 @@ local defaults = {
     highlightNoob = true,
     enableOneClickReject = false,
   },
+  debug = {
+    showPanel = false,
+  },
 }
 
 local function CopyDefaults(src, dst)

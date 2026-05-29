@@ -45,6 +45,13 @@ ns.events:SetScript("OnEvent", function(_, event, ...)
 
     SLASH_REMEMBERNOOB1 = "/noob"
     SlashCmdList["REMEMBERNOOB"] = function(msg)
+      msg = (msg or ""):gsub("^%s+", ""):gsub("%s+$", "")
+      if msg == "debug" then
+        if ns.RememberNoobUI and ns.RememberNoobUI.ToggleDebugPanel then
+          ns.RememberNoobUI.ToggleDebugPanel()
+        end
+        return
+      end
       if ns.RememberNoobUI and ns.RememberNoobUI.ShowManagementUI then
         ns.RememberNoobUI.ShowManagementUI()
       end

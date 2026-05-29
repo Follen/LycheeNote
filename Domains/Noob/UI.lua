@@ -259,6 +259,10 @@ local function SetConfigValue(configPath, value)
   end
 end
 
+local function IsDebugPanelEnabled()
+  return ns.Config and ns.Config.Get and ns.Config.Get("debug.showPanel") == true
+end
+
 local function SetShown(frame, shown)
   if not frame then return end
   if frame.SetShown then
@@ -726,6 +730,92 @@ function UI.CreateMeetingStoneFilterPanel(panel)
   CreatePageTitle(panel, "集合石过滤")
 end
 
+function UI.RefreshDebugLogPanel()
+  local frame = _G["RememberNoobManagementFrame"]
+  local panel = frame and frame.debugPanel
+  if not panel then return end
+
+  local meetingStone = ns.RememberNoobMeetingStone
+  local enabled = meetingStone and meetingStone.IsFilterLogEnabled and meetingStone.IsFilterLogEnabled()
+  local count = meetingStone and meetingStone.GetFilterLogCount and meetingStone.GetFilterLogCount() or 0
+  local text = meetingStone and meetingStone.GetFilterLogText and meetingStone.GetFilterLogText() or ""
+
+  if panel.logButton and panel.logButton.label then
+    panel.logButton.label:SetText(enabled and "关闭集合石过滤日志" or "开启集合石过滤日志")
+  end
+  if panel.countText then
+    panel.countText:SetText("记录：" .. count)
+  end
+  if panel.editBox then
+    panel.editBox:SetText(text)
+    panel.editBox:SetCursorPosition(0)
+    if panel.logBg and panel.editBox.GetStringHeight then
+      panel.logBg:SetHeight(math.max(338, math.ceil(panel.editBox:GetStringHeight() + 20)))
+    end
+  end
+end
+
+function UI.CreateDebugPanel(panel)
+  CreatePageTitle(panel, "调试")
+
+  local logButton = Controls and Controls.CreateButton and
+    Controls.CreateButton(panel, "开启集合石过滤日志", 150, 28)
+  if logButton and logButton.SetPoint then
+    logButton:SetPoint("TOPRIGHT", panel, "TOPRIGHT", 0, -2)
+  end
+
+  local countText = Controls and Controls.CreateText and
+    Controls.CreateText(panel, "记录：0", "GameFontNormalSmall", "LABEL_COLOR")
+  if countText and countText.SetPoint then
+    countText:SetPoint("RIGHT", logButton or panel, logButton and "LEFT" or "TOPRIGHT", -12, 0)
+  end
+
+  local scrollFrame = CreateFrame("ScrollFrame", nil, panel, "UIPanelScrollFrameTemplate")
+  scrollFrame:SetPoint("TOPLEFT", panel, "TOPLEFT", 0, -54)
+  scrollFrame:SetSize(640, 338)
+  StyleScrollBar(scrollFrame)
+
+  local logBg = CreateFrame("Frame", nil, scrollFrame, "BackdropTemplate")
+  logBg:SetSize(622, 338)
+  logBg:SetBackdrop({
+    bgFile = "Interface\\Buttons\\WHITE8x8",
+    edgeFile = "Interface\\Buttons\\WHITE8x8",
+    edgeSize = 1,
+  })
+  SetColor(logBg, "SetBackdropColor", {0.12, 0.12, 0.14, 0.90})
+  SetColor(logBg, "SetBackdropBorderColor", {0.22, 0.22, 0.26, 0.70})
+
+  local editBox = CreateFrame("EditBox", nil, logBg)
+  editBox:SetPoint("TOPLEFT", logBg, "TOPLEFT", 8, -8)
+  editBox:SetPoint("BOTTOMRIGHT", logBg, "BOTTOMRIGHT", -8, 8)
+  editBox:SetMultiLine(true)
+  editBox:SetAutoFocus(false)
+  editBox:SetFontObject("ChatFontNormal")
+  editBox:SetMaxLetters(200000)
+  editBox:SetCursorPosition(0)
+  editBox:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+  editBox:SetScript("OnMouseDown", function(self, button)
+    if button == "LeftButton" then self:SetFocus() end
+  end)
+  scrollFrame:SetScrollChild(logBg)
+
+  if logButton and logButton.SetScript then
+    logButton:SetScript("OnClick", function()
+      if ns.RememberNoobMeetingStone and ns.RememberNoobMeetingStone.ToggleFilterLog then
+        ns.RememberNoobMeetingStone.ToggleFilterLog()
+      end
+      UI.RefreshDebugLogPanel()
+    end)
+  end
+
+  panel.logButton = logButton
+  panel.countText = countText
+  panel.logBg = logBg
+  panel.editBox = editBox
+  panel:SetScript("OnShow", UI.RefreshDebugLogPanel)
+  UI.RefreshDebugLogPanel()
+end
+
 function UI.CreateDataManagementPanel(panel, listPanel)
   local titleText = CreatePageTitle(panel, "数据管理")
 
@@ -823,6 +913,9 @@ function UI.ShowManagementUI()
   local navButtons = {}
   local pagePanels = {}
   local pageNames = {"笨蛋列表", "集合石设置", "集合石过滤", "数据管理"}
+  if IsDebugPanelEnabled() then
+    pageNames[#pageNames + 1] = "调试"
+  end
   local currentPage = 1
 
   for i, pageName in ipairs(pageNames) do
@@ -858,6 +951,10 @@ function UI.ShowManagementUI()
   UI.CreateMeetingStoneSettingsPanel(pagePanels[2])
   UI.CreateMeetingStoneFilterPanel(pagePanels[3])
   UI.CreateDataManagementPanel(pagePanels[4], listPanel)
+  if pagePanels[5] then
+    frame.debugPanel = pagePanels[5]
+    UI.CreateDebugPanel(pagePanels[5])
+  end
 
   -- Bottom bar with author
   local bottomBar = CreateFrame("Frame", nil, frame, "BackdropTemplate")
@@ -893,5 +990,16 @@ function UI.RefreshManagementUIIfOpen()
   local frame = _G["RememberNoobManagementFrame"]
   if frame and frame:IsShown() and frame.listPanel then
     UI.RefreshListPanel(frame.listPanel)
+  end
+end
+
+function UI.ToggleDebugPanel()
+  local enabled = not IsDebugPanelEnabled()
+  if ns.Config and ns.Config.Set then
+    ns.Config.Set("debug.showPanel", enabled)
+  end
+  print("|cff66a8abRememberNoob: 调试标签" .. (enabled and "已显示" or "已隐藏") .. "|r")
+  if enabled or _G["RememberNoobManagementFrame"] then
+    UI.ShowManagementUI()
   end
 end
