@@ -196,7 +196,10 @@ function MeetingStone.SearchDebugCategory(categoryID, baseFilter)
   if C_LFGList and C_LFGList.Search then
     local languages = C_LFGList.GetLanguageSearchFilter and C_LFGList.GetLanguageSearchFilter()
     local advancedFilter = debugSearchCategoryID == 2 and C_LFGList.GetAdvancedFilter and C_LFGList.GetAdvancedFilter()
-    local filterValue = debugSearchCategoryID == 2 and 1 or 0
+    local filterValue = 0
+    if debugSearchCategoryID == 2 and Enum and Enum.LFGListFilter and bit then
+      filterValue = bit.band(bit.bnot(Enum.LFGListFilter.NotRecommended), bit.bor(0, Enum.LFGListFilter.Recommended))
+    end
     pcall(C_LFGList.Search, debugSearchCategoryID, filterValue, nil, languages, nil, advancedFilter)
     if C_Timer and C_Timer.After then
       C_Timer.After(0.5, RecordCurrentSearchResults)
