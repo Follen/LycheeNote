@@ -190,9 +190,11 @@ end
 
 local function BuildFilterLogRecordFromActivity(activity)
   if not activity then return nil end
+  local resultID = SafeCFunction(activity.GetID, activity)
   local activityID = SafeCFunction(activity.GetActivityID, activity)
   local activityInfo = GetActivityInfo(activityID)
   return {
+    resultID = resultID,
     time = date("%Y-%m-%d %H:%M:%S"),
     category = CleanLogValue(GetActivityCategoryNameFromActivity(activity, activityInfo)),
     activityType = CleanLogValue(GetActivityTypeName(activity, activityInfo)),
@@ -221,6 +223,9 @@ local function BuildFilterLogSavedVariables()
   local lines = {"RememberNoobMeetingStoneFilterLog = {"}
   for index, record in ipairs(filterLogRecords) do
     lines[#lines + 1] = "  [" .. index .. "] = {"
+    if record.resultID then
+      lines[#lines + 1] = "    resultID = " .. tostring(record.resultID) .. ","
+    end
     lines[#lines + 1] = "    time = \"" .. EscapeLuaString(record.time) .. "\","
     lines[#lines + 1] = "    category = \"" .. EscapeLuaString(record.category) .. "\","
     lines[#lines + 1] = "    activityType = \"" .. EscapeLuaString(record.activityType) .. "\","
@@ -237,9 +242,9 @@ end
 local function AddFilterLogActivity(activity)
   local record = BuildFilterLogRecordFromActivity(activity)
   if not record then return false end
-  local code = SafeCFunction(activity.GetCode, activity) or SafeCFunction(activity.GetID, activity) or
+  local code = SafeCFunction(activity.GetCode, activity) or
     (record.leader .. ":" .. record.title .. ":" .. record.activityName)
-  local key = tostring(code)
+  local key = tostring(record.resultID or code)
   if filterLogSeen[key] then return false end
 
   filterLogSeen[key] = true
