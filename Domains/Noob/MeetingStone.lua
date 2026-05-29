@@ -347,15 +347,19 @@ local function HookOperationGrid()
   end
 end
 
-local function PatchNoobIconHeader(list)
+local function PatchNoobIconHeader(list, preferredKey)
   if not list or list.__RememberNoobIconPatched or type(list.sortButtons) ~= "table" then return end
   for _, header in ipairs(list.sortButtons) do
-    if header.key == "Icon" or header.key == "@" then
+    if (preferredKey and header.key == preferredKey) or (not preferredKey and (header.key == "Icon" or header.key == "@")) then
+      if preferredKey == "starTarget" and header.SetText then
+        header:SetText("RN评价")
+      end
       local oldIconHandler = header.iconHandler
       header.iconHandler = function(data)
         if data and GetSetting("showIcon") and ((data.GetRememberNoobMatched and data:GetRememberNoobMatched()) or ActivityHasNoobLeader(data)) then
           return [[Interface\TargetingFrame\UI-RaidTargetingIcon_8]]
         end
+        if preferredKey == "starTarget" then return nil end
         if oldIconHandler then
           return oldIconHandler(data)
         end
@@ -505,7 +509,7 @@ local function HookApplicantPanelList()
   local ApplicantPanel = GetMeetingStoneValue("ApplicantPanel")
   if not ApplicantPanel then return end
   if ApplicantPanel.ApplicantList then
-    PatchNoobIconHeader(ApplicantPanel.ApplicantList)
+    PatchNoobIconHeader(ApplicantPanel.ApplicantList, "starTarget")
     PatchApplicantNameHeader(ApplicantPanel.ApplicantList)
 
     local list = ApplicantPanel.ApplicantList
