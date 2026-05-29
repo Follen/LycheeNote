@@ -846,7 +846,12 @@ function UI.RefreshDebugLogPanel()
     panel.logButton.label:SetText(enabled and "关闭集合石过滤日志" or "开启集合石过滤日志")
   end
   if panel.countText then
-    panel.countText:SetText("记录：" .. count .. (status ~= "" and ("  " .. status) or ""))
+    local current = status:match("^结果:%s*(%d+)$")
+    if current then
+      panel.countText:SetText("累计：" .. count .. "  当前列表：" .. current)
+    else
+      panel.countText:SetText("累计：" .. count .. (status ~= "" and ("  " .. status) or ""))
+    end
   end
   local lineCount = 1
   for _ in string.gmatch(text, "\n") do
@@ -862,6 +867,7 @@ function UI.RefreshDebugLogPanel()
     panel.copyBox:SetText(text)
     panel.copyBox:SetCursorPosition(0)
     panel.copyBox:SetHeight(contentHeight - 16)
+    panel.copyBox:Show()
   end
   if panel.logBg then
     panel.logBg:SetHeight(contentHeight)
@@ -872,6 +878,7 @@ local function EnableDebugLogCopy(panel)
   if not panel or not panel.copyBox then return end
   local copyBox = panel.copyBox
   copyBox:EnableMouse(true)
+  copyBox:SetEnabled(true)
   copyBox:SetScript("OnEditFocusGained", function(self)
     self:HighlightText()
   end)
@@ -884,6 +891,16 @@ local function EnableDebugLogCopy(panel)
       self:HighlightText()
     end
   end)
+end
+
+local function SelectDebugLog(panel)
+  if not panel or not panel.copyBox then return end
+  UI.RefreshDebugLogPanel()
+  panel.copyBox:Show()
+  panel.copyBox:EnableMouse(true)
+  panel.copyBox:SetEnabled(true)
+  panel.copyBox:SetFocus()
+  panel.copyBox:HighlightText()
 end
 
 local function UpdateDebugLogHeight(panel)
@@ -915,10 +932,16 @@ function UI.CreateDebugPanel(panel)
     logButton:SetPoint("TOPRIGHT", panel, "TOPRIGHT", 0, -42)
   end
 
+  local selectButton = Controls and Controls.CreateButton and
+    Controls.CreateButton(panel, "全选日志", 88, 28)
+  if selectButton and selectButton.SetPoint then
+    selectButton:SetPoint("RIGHT", logButton, "LEFT", -8, 0)
+  end
+
   local countText = Controls and Controls.CreateText and
     Controls.CreateText(panel, "记录：0", "GameFontNormalSmall", "LABEL_COLOR")
   if countText and countText.SetPoint then
-    countText:SetPoint("RIGHT", logButton or panel, logButton and "LEFT" or "TOPRIGHT", -12, 0)
+    countText:SetPoint("RIGHT", selectButton or logButton or panel, (selectButton or logButton) and "LEFT" or "TOPRIGHT", -12, 0)
   end
 
   local scrollFrame = CreateFrame("ScrollFrame", nil, panel, "UIPanelScrollFrameTemplate")
@@ -952,7 +975,8 @@ function UI.CreateDebugPanel(panel)
   copyBox:SetAutoFocus(false)
   copyBox:SetFontObject("ChatFontNormal")
   copyBox:SetTextColor(0.92, 0.92, 0.95, 1)
-  copyBox:SetMaxLetters(200000)
+  copyBox:SetWidth(606)
+  copyBox:SetMaxLetters(500000)
   copyBox:SetJustifyH("LEFT")
   copyBox:SetJustifyV("TOP")
   copyBox:SetScript("OnTextChanged", function()
@@ -973,8 +997,15 @@ function UI.CreateDebugPanel(panel)
     end)
   end
 
+  if selectButton and selectButton.SetScript then
+    selectButton:SetScript("OnClick", function()
+      SelectDebugLog(panel)
+    end)
+  end
+
   panel.categoryDropdown = categoryDropdown
   panel.logButton = logButton
+  panel.selectButton = selectButton
   panel.countText = countText
   panel.logBg = logBg
   panel.logText = logText
