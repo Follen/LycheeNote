@@ -841,7 +841,6 @@ function UI.RefreshDebugLogPanel()
   local count = meetingStone and meetingStone.GetFilterLogCount and meetingStone.GetFilterLogCount() or 0
   local status = meetingStone and meetingStone.GetFilterLogStatus and meetingStone.GetFilterLogStatus() or ""
   local text = meetingStone and meetingStone.GetFilterLogText and meetingStone.GetFilterLogText() or ""
-  local displayText = meetingStone and meetingStone.GetFilterLogDisplayText and meetingStone.GetFilterLogDisplayText() or text
 
   if panel.logButton and panel.logButton.label then
     panel.logButton.label:SetText(enabled and "关闭集合石过滤日志" or "开启集合石过滤日志")
@@ -849,22 +848,56 @@ function UI.RefreshDebugLogPanel()
   if panel.countText then
     panel.countText:SetText("记录：" .. count .. (status ~= "" and ("  " .. status) or ""))
   end
+  local lineCount = 1
+  for _ in string.gmatch(text, "\n") do
+    lineCount = lineCount + 1
+  end
+  local contentHeight = math.max(316, lineCount * 16 + 20)
+
   if panel.logText then
-    panel.logText:SetText(displayText)
-    local lineCount = 1
-    for _ in string.gmatch(displayText, "\n") do
-      lineCount = lineCount + 1
-    end
-    local contentHeight = math.max(316, lineCount * 16 + 20)
-    panel.logText:SetHeight(contentHeight - 16)
-    if panel.copyBox then panel.copyBox:SetHeight(contentHeight - 16) end
-    if panel.logBg then
-      panel.logBg:SetHeight(contentHeight)
-    end
+    panel.logText:SetText("")
+    panel.logText:Hide()
   end
   if panel.copyBox then
     panel.copyBox:SetText(text)
     panel.copyBox:SetCursorPosition(0)
+    panel.copyBox:SetHeight(contentHeight - 16)
+  end
+  if panel.logBg then
+    panel.logBg:SetHeight(contentHeight)
+  end
+end
+
+local function EnableDebugLogCopy(panel)
+  if not panel or not panel.copyBox then return end
+  local copyBox = panel.copyBox
+  copyBox:EnableMouse(true)
+  copyBox:SetScript("OnEditFocusGained", function(self)
+    self:HighlightText()
+  end)
+  copyBox:SetScript("OnEscapePressed", function(self)
+    self:ClearFocus()
+  end)
+  copyBox:SetScript("OnMouseDown", function(self, button)
+    if button == "LeftButton" then
+      self:SetFocus()
+      self:HighlightText()
+    end
+  end)
+end
+
+local function UpdateDebugLogHeight(panel)
+  if not panel or not panel.copyBox then return end
+  local text = panel.copyBox:GetText() or ""
+  local lineCount = 1
+  for _ in string.gmatch(text, "\n") do
+    lineCount = lineCount + 1
+  end
+  local contentHeight = math.max(316, lineCount * 16 + 20)
+  if panel.logText then panel.logText:Hide() end
+  panel.copyBox:SetHeight(contentHeight - 16)
+  if panel.logBg then
+    panel.logBg:SetHeight(contentHeight)
   end
 end
 
@@ -910,22 +943,20 @@ function UI.CreateDebugPanel(panel)
   logText:SetJustifyV("TOP")
   logText:SetWordWrap(false)
   SetColor(logText, "SetTextColor", {0.92, 0.92, 0.95, 1})
+  logText:Hide()
 
   local copyBox = CreateFrame("EditBox", nil, logBg)
   copyBox:SetPoint("TOPLEFT", logBg, "TOPLEFT", 8, -8)
   copyBox:SetPoint("BOTTOMRIGHT", logBg, "BOTTOMRIGHT", -8, 8)
   copyBox:SetMultiLine(true)
   copyBox:SetAutoFocus(false)
-  copyBox:SetFontObject("GameFontNormalSmall")
-  copyBox:SetTextColor(0, 0, 0, 0)
-  copyBox:SetAlpha(0.01)
+  copyBox:SetFontObject("ChatFontNormal")
+  copyBox:SetTextColor(0.92, 0.92, 0.95, 1)
   copyBox:SetMaxLetters(200000)
-  copyBox:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
-  copyBox:SetScript("OnMouseDown", function(self, button)
-    if button == "LeftButton" then
-      self:SetFocus()
-      self:HighlightText()
-    end
+  copyBox:SetJustifyH("LEFT")
+  copyBox:SetJustifyV("TOP")
+  copyBox:SetScript("OnTextChanged", function()
+    UpdateDebugLogHeight(panel)
   end)
   scrollFrame:SetScrollChild(logBg)
 
@@ -936,7 +967,7 @@ function UI.CreateDebugPanel(panel)
       end
       local item = categoryDropdown and categoryDropdown.GetItem and categoryDropdown:GetItem()
       if item and ns.RememberNoobMeetingStone and ns.RememberNoobMeetingStone.SearchDebugCategory then
-        ns.RememberNoobMeetingStone.SearchDebugCategory(item.categoryID, item.baseFilter)
+        ns.RememberNoobMeetingStone.SearchDebugCategory(item)
       end
       UI.RefreshDebugLogPanel()
     end)
@@ -948,6 +979,7 @@ function UI.CreateDebugPanel(panel)
   panel.logBg = logBg
   panel.logText = logText
   panel.copyBox = copyBox
+  EnableDebugLogCopy(panel)
   panel:SetScript("OnShow", UI.RefreshDebugLogPanel)
   UI.RefreshDebugLogPanel()
 end
