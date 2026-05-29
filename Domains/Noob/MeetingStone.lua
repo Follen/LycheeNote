@@ -101,6 +101,52 @@ local function ActivityHasNoobLeader(activity)
   return GetNoobRecord(activity:GetLeader()) ~= nil
 end
 
+local function GetRememberNoobApplicantIDs(applicants)
+  local ids = {}
+  local seen = {}
+  for _, applicant in ipairs(applicants or {}) do
+    local id = applicant.GetID and applicant:GetID()
+    if id and ApplicantHasNoob(applicant) and not seen[id] then
+      seen[id] = true
+      ids[#ids + 1] = id
+    end
+  end
+  return ids
+end
+
+local function EnsureNoobBackground(button)
+  if not button then return nil end
+  if button.noobBg then return button.noobBg end
+
+  local noobBg = button:CreateTexture(nil, "BACKGROUND", nil, 1)
+  noobBg:SetPoint("TOPLEFT", button, "TOPLEFT", 0, -1)
+  noobBg:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", 0, 1)
+  noobBg:SetColorTexture(0.85, 0.05, 0.05)
+  noobBg:SetAlpha(0.28)
+  noobBg:Hide()
+  button.noobBg = noobBg
+  return noobBg
+end
+
+local function SetButtonNoobHighlight(button, enable, endButton)
+  local noobBg = EnsureNoobBackground(button)
+  if not noobBg then return end
+
+  local shown = enable and GetSetting("highlightNoob") or false
+  button.rememberNoobHighlight = shown
+
+  noobBg:ClearAllPoints()
+  noobBg:SetPoint("TOPLEFT", button, "TOPLEFT", 0, -1)
+  if endButton then
+    noobBg:SetPoint("BOTTOMRIGHT", endButton, "BOTTOMRIGHT", 0, 1)
+  else
+    noobBg:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", 0, 1)
+  end
+  noobBg:SetColorTexture(0.85, 0.05, 0.05)
+  noobBg:SetAlpha(0.28)
+  noobBg:SetShown(shown)
+end
+
 local function SetRejectButtonState(panel)
   if not panel or not panel.RememberNoobRejectButton then return end
   if GetSetting("enableOneClickReject") then
@@ -108,6 +154,27 @@ local function SetRejectButtonState(panel)
   else
     panel.RememberNoobRejectButton:Hide()
   end
+end
+
+local function CreateRejectButton(applicantPanel, managerPanel)
+  if not applicantPanel or not managerPanel or applicantPanel.RememberNoobRejectButton then return end
+  if not managerPanel.RefreshButton then return end
+
+  local button = CreateFrame("Button", nil, managerPanel, "UIMenuButtonStretchTemplate")
+  button:SetSize(90, 20)
+  button:SetPoint("TOPRIGHT", managerPanel.RefreshButton, "TOPLEFT", -6, 0)
+  button:SetNormalFontObject("GameFontNormal")
+  button:SetHighlightFontObject("GameFontHighlight")
+  button:SetDisabledFontObject("GameFontDisable")
+  button:SetScript("OnClick", function()
+    if applicantPanel.DeclineRememberNoobs then
+      applicantPanel:DeclineRememberNoobs()
+    end
+  end)
+
+  applicantPanel.RememberNoobRejectButton = button
+  managerPanel.RememberNoobRejectButton = button
+  SetRejectButtonState(applicantPanel)
 end
 
 local function ApplyOperationNoobIcon(grid)
@@ -214,14 +281,43 @@ end
 
 local function HookApplicantItem()
   local ApplicantItem = GetMeetingStoneClass("ApplicantItem")
-  if not ApplicantItem or ApplicantItem.__RememberNoobSetHighlightHooked or not ApplicantItem.SetRememberNoobHighlight then return end
-  ApplicantItem.__RememberNoobSetHighlightHooked = true
+  if not ApplicantItem then return end
 
-  local oldSetRememberNoobHighlight = ApplicantItem.SetRememberNoobHighlight
-  function ApplicantItem:SetRememberNoobHighlight(enable)
-    oldSetRememberNoobHighlight(self, enable and GetSetting("highlightNoob"))
-    if self.noobBg and not GetSetting("highlightNoob") then
-      self.noobBg:Hide()
+  if ApplicantItem.Constructor and not ApplicantItem.__RememberNoobConstructorHooked then
+    ApplicantItem.__RememberNoobConstructorHooked = true
+    local oldConstructor = ApplicantItem.Constructor
+    function ApplicantItem:Constructor(...)
+      oldConstructor(self, ...)
+      EnsureNoobBackground(self)
+    end
+  end
+
+  if ApplicantItem.SetAlpha and not ApplicantItem.__RememberNoobSetAlphaHooked then
+    ApplicantItem.__RememberNoobSetAlphaHooked = true
+    local oldSetAlpha = ApplicantItem.SetAlpha
+    function ApplicantItem:SetAlpha(alpha, button)
+      oldSetAlpha(self, alpha, button)
+      SetButtonNoobHighlight(self, self.rememberNoobHighlight, button)
+    end
+  end
+
+  if ApplicantItem.SetBackground and not ApplicantItem.__RememberNoobSetBackgroundHooked then
+    ApplicantItem.__RememberNoobSetBackgroundHooked = true
+    local oldSetBackground = ApplicantItem.SetBackground
+    function ApplicantItem:SetBackground(enable)
+      oldSetBackground(self, enable)
+      SetButtonNoobHighlight(self, self.rememberNoobHighlight)
+    end
+  end
+
+  if not ApplicantItem.__RememberNoobSetHighlightHooked then
+    ApplicantItem.__RememberNoobSetHighlightHooked = true
+    local oldSetRememberNoobHighlight = ApplicantItem.SetRememberNoobHighlight
+    function ApplicantItem:SetRememberNoobHighlight(enable)
+      if oldSetRememberNoobHighlight then
+        oldSetRememberNoobHighlight(self, enable and GetSetting("highlightNoob"))
+      end
+      SetButtonNoobHighlight(self, enable)
     end
   end
 end
@@ -311,22 +407,43 @@ local function HookApplicantPanel()
   local ManagerPanel = GetMeetingStoneValue("ManagerPanel")
   if not ApplicantPanel then return end
 
-  if ApplicantPanel.UpdateRememberNoobRejectButton and not ApplicantPanel.__RememberNoobUpdateRejectHooked then
+  CreateRejectButton(ApplicantPanel, ManagerPanel)
+
+  if not ApplicantPanel.__RememberNoobUpdateRejectHooked then
     ApplicantPanel.__RememberNoobUpdateRejectHooked = true
     local oldUpdateRejectButton = ApplicantPanel.UpdateRememberNoobRejectButton
     function ApplicantPanel:UpdateRememberNoobRejectButton()
-      oldUpdateRejectButton(self)
+      if oldUpdateRejectButton then
+        oldUpdateRejectButton(self)
+      elseif self.RememberNoobRejectButton then
+        local count = #GetRememberNoobApplicantIDs(self.ApplicantList and self.ApplicantList:GetItemList())
+        self.RememberNoobRejectButton:SetEnabled(count > 0)
+        self.RememberNoobRejectButton:SetText(count > 0 and ("拒绝笨蛋(" .. count .. ")") or "拒绝笨蛋")
+      end
       SetRejectButtonState(self)
       SetRejectButtonState(ManagerPanel)
     end
   end
 
-  if ApplicantPanel.DeclineRememberNoobs and not ApplicantPanel.__RememberNoobDeclineHooked then
+  if not ApplicantPanel.__RememberNoobDeclineHooked then
     ApplicantPanel.__RememberNoobDeclineHooked = true
     local oldDeclineRememberNoobs = ApplicantPanel.DeclineRememberNoobs
     function ApplicantPanel:DeclineRememberNoobs()
       if not GetSetting("enableOneClickReject") then return end
-      oldDeclineRememberNoobs(self)
+      if oldDeclineRememberNoobs then
+        oldDeclineRememberNoobs(self)
+        return
+      end
+
+      for _, id in ipairs(GetRememberNoobApplicantIDs(self.ApplicantList and self.ApplicantList:GetItemList())) do
+        local info = C_LFGList.GetApplicantInfo(id)
+        if info and self.Decline then
+          self:Decline(id, info.applicationStatus)
+        end
+      end
+      if self.UpdateApplicantsList then
+        self:UpdateApplicantsList()
+      end
     end
   end
 
@@ -336,18 +453,36 @@ end
 
 local function HookMainPanel()
   local MainPanel = GetMeetingStoneValue("MainPanel")
-  if not MainPanel or MainPanel.__RememberNoobActivityTooltipHooked or not MainPanel.OpenActivityTooltip then return end
-  MainPanel.__RememberNoobActivityTooltipHooked = true
+  if not MainPanel then return end
 
-  local oldOpenActivityTooltip = MainPanel.OpenActivityTooltip
-  function MainPanel:OpenActivityTooltip(activity, tooltip)
-    oldOpenActivityTooltip(self, activity, tooltip)
-    local targetTooltip = tooltip or self.GameTooltip
-    if activity and activity.GetLeader then
-      local record, cleanName = GetNoobRecord(activity:GetLeader())
-      if record and targetTooltip then
-        AddTooltipLines(targetTooltip, activity:GetLeader(), record, cleanName)
-        targetTooltip:Show()
+  if MainPanel.OpenActivityTooltip and not MainPanel.__RememberNoobActivityTooltipHooked then
+    MainPanel.__RememberNoobActivityTooltipHooked = true
+    local oldOpenActivityTooltip = MainPanel.OpenActivityTooltip
+    function MainPanel:OpenActivityTooltip(activity, tooltip)
+      oldOpenActivityTooltip(self, activity, tooltip)
+      local targetTooltip = tooltip or self.GameTooltip
+      if activity and activity.GetLeader then
+        local record, cleanName = GetNoobRecord(activity:GetLeader())
+        if record and targetTooltip then
+          AddTooltipLines(targetTooltip, activity:GetLeader(), record, cleanName)
+          targetTooltip:Show()
+        end
+      end
+    end
+  end
+
+  if MainPanel.OpenApplicantTooltip and not MainPanel.__RememberNoobApplicantTooltipHooked then
+    MainPanel.__RememberNoobApplicantTooltipHooked = true
+    local oldOpenApplicantTooltip = MainPanel.OpenApplicantTooltip
+    function MainPanel:OpenApplicantTooltip(applicant)
+      oldOpenApplicantTooltip(self, applicant)
+      local targetTooltip = self.GameTooltip
+      if applicant and applicant.GetName and targetTooltip then
+        local record, cleanName = FindApplicantNoobRecord(applicant)
+        if record then
+          AddTooltipLines(targetTooltip, applicant:GetName(), record, cleanName)
+          targetTooltip:Show()
+        end
       end
     end
   end
@@ -372,6 +507,18 @@ local function HookApplicantPanelList()
   if ApplicantPanel.ApplicantList then
     PatchNoobIconHeader(ApplicantPanel.ApplicantList)
     PatchApplicantNameHeader(ApplicantPanel.ApplicantList)
+
+    local list = ApplicantPanel.ApplicantList
+    if not list.__RememberNoobGroupedHooked and list.events and list.events.OnItemGrouped then
+      list.__RememberNoobGroupedHooked = true
+      local oldOnItemGrouped = list.events.OnItemGrouped
+      list:SetCallback("OnItemGrouped", function(view, button, applicant, ...)
+        oldOnItemGrouped(view, button, applicant, ...)
+        if button and button.SetRememberNoobHighlight then
+          button:SetRememberNoobHighlight(ApplicantHasNoob(applicant))
+        end
+      end)
+    end
   end
   if ApplicantPanel.UpdateRememberNoobRejectButton then
     pcall(ApplicantPanel.UpdateRememberNoobRejectButton, ApplicantPanel)
