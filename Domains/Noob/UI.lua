@@ -246,50 +246,136 @@ local function CreateWrappedText(parent, text, anchor, xOffset, yOffset, width)
   return fontString
 end
 
-local function CreateConfigCheckButton(parent, label, description, configPath, yOffset)
-  local row = CreateFrame("Frame", nil, parent, "BackdropTemplate")
-  row:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, yOffset)
-  row:SetSize(640, 58)
-  row:EnableMouse(true)
-  row:SetBackdrop({
+local function GetConfigValue(configPath)
+  return ns.Config and ns.Config.Get and ns.Config.Get(configPath) == true
+end
+
+local function SetConfigValue(configPath, value)
+  if ns.Config and ns.Config.Set then
+    ns.Config.Set(configPath, value and true or false)
+  end
+end
+
+local function SetShown(frame, shown)
+  if not frame then return end
+  if frame.SetShown then
+    frame:SetShown(shown)
+  elseif shown and frame.Show then
+    frame:Show()
+  elseif frame.Hide then
+    frame:Hide()
+  end
+end
+
+local function CreateSidebarButton(parent, text, width, height, active)
+  local button = CreateFrame("Button", nil, parent, "BackdropTemplate")
+  button:SetSize(width or 136, height or 34)
+  button:SetBackdrop({
     bgFile = "Interface\\Buttons\\WHITE8x8",
     edgeFile = "Interface\\Buttons\\WHITE8x8",
     edgeSize = 1,
   })
-  SetColor(row, "SetBackdropColor", {0.075, 0.075, 0.095, 0.72})
-  SetColor(row, "SetBackdropBorderColor", {0.20, 0.20, 0.23, 0.40})
+  if button.SetPushedTextOffset then button:SetPushedTextOffset(0, -1) end
 
-  local check = CreateFrame("CheckButton", nil, row, "UICheckButtonTemplate")
-  check:SetPoint("LEFT", row, "LEFT", 10, 0)
-  check:SetSize(24, 24)
-  check:SetChecked(ns.Config and ns.Config.Get and ns.Config.Get(configPath) == true)
-  check:SetScript("OnClick", function(self)
-    if ns.Config and ns.Config.Set then
-      ns.Config.Set(configPath, self:GetChecked() and true or false)
+  button.hover = button:CreateTexture(nil, "BACKGROUND")
+  button.hover:SetAllPoints(button)
+  button.hover:SetColorTexture(0.408, 0.659, 0.671, 0.14)
+  button.hover:Hide()
+
+  button.accent = button:CreateTexture(nil, "ARTWORK")
+  button.accent:SetPoint("TOPLEFT", button, "TOPLEFT", 0, -5)
+  button.accent:SetPoint("BOTTOMLEFT", button, "BOTTOMLEFT", 0, 5)
+  button.accent:SetWidth(3)
+  button.accent:SetColorTexture(0.408, 0.659, 0.671, 1)
+
+  local label = Controls and Controls.CreateText and
+    Controls.CreateText(button, text, "GameFontHighlightSmall", "VALUE_COLOR")
+  if label and label.SetPoint then label:SetPoint("LEFT", button, "LEFT", 18, 0) end
+  if label and label.SetJustifyH then label:SetJustifyH("LEFT") end
+  button.label = label
+
+  function button:SetActive(isActive)
+    self.active = isActive and true or false
+    SetColor(self, "SetBackdropColor", self.active and {0.10, 0.10, 0.12, 0.82} or {0.055, 0.055, 0.07, 0.18})
+    SetColor(self, "SetBackdropBorderColor", self.active and {0.408, 0.659, 0.671, 0.65} or {0.20, 0.20, 0.23, 0.18})
+    SetColor(self.label, "SetTextColor", self.active and {0.92, 0.92, 0.95, 1} or {0.70, 0.70, 0.76, 1})
+    SetShown(self.accent, self.active)
+    SetShown(self.hover, self.active)
+  end
+
+  button:SetScript("OnEnter", function(self)
+    SetShown(self.hover, true)
+    if not self.active then
+      SetColor(self, "SetBackdropBorderColor", {0.408, 0.659, 0.671, 0.34})
     end
   end)
+  button:SetScript("OnLeave", function(self)
+    SetShown(self.hover, self.active)
+    if not self.active then
+      SetColor(self, "SetBackdropBorderColor", {0.20, 0.20, 0.23, 0.18})
+    end
+  end)
+
+  button:SetActive(active)
+  return button
+end
+
+local function CreateConfigCheckButton(parent, label, description, configPath, yOffset)
+  local row = CreateFrame("Frame", nil, parent, "BackdropTemplate")
+  row:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, yOffset)
+  row:SetSize(640, 54)
+  row:EnableMouse(true)
+  row:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8" })
+  SetColor(row, "SetBackdropColor", {0.055, 0.055, 0.07, 0.24})
+
+  local check = CreateFrame("Button", nil, row, "BackdropTemplate")
+  check:SetPoint("LEFT", row, "LEFT", 2, 0)
+  check:SetSize(18, 18)
+  check:SetBackdrop({
+    bgFile = "Interface\\Buttons\\WHITE8x8",
+    edgeFile = "Interface\\Buttons\\WHITE8x8",
+    edgeSize = 1,
+  })
+  SetColor(check, "SetBackdropColor", {0.12, 0.12, 0.14, 0.90})
+
+  check.inner = check:CreateTexture(nil, "ARTWORK")
+  check.inner:SetPoint("TOPLEFT", check, "TOPLEFT", 4, -4)
+  check.inner:SetPoint("BOTTOMRIGHT", check, "BOTTOMRIGHT", -4, 4)
+  SetColor(check.inner, "SetColorTexture", Style and Style.Get and Style.Get("ACCENT_COLOR") or {0.408, 0.659, 0.671, 1})
 
   local labelText = Controls and Controls.CreateText and
     Controls.CreateText(row, label, "GameFontNormal", "VALUE_COLOR")
   if labelText and labelText.SetPoint then
-    labelText:SetPoint("TOPLEFT", check, "TOPRIGHT", 8, 2)
+    labelText:SetPoint("TOPLEFT", check, "TOPRIGHT", 14, 6)
   end
 
   local descText = Controls and Controls.CreateText and
     Controls.CreateText(row, description, "GameFontNormalSmall", "LABEL_COLOR")
   if descText and descText.SetPoint then
     descText:SetPoint("TOPLEFT", labelText or check, labelText and "BOTTOMLEFT" or "TOPRIGHT", 0, -5)
-    descText:SetWidth(560)
+    descText:SetWidth(580)
     descText:SetJustifyH("LEFT")
   end
 
-  row:SetScript("OnMouseUp", function()
-    check:SetChecked(not check:GetChecked())
-    if ns.Config and ns.Config.Set then
-      ns.Config.Set(configPath, check:GetChecked() and true or false)
+  function check:Refresh()
+    local checked = GetConfigValue(configPath)
+    SetShown(self.inner, checked)
+    SetColor(self, "SetBackdropBorderColor", checked and {0.408, 0.659, 0.671, 1} or {0.20, 0.20, 0.23, 0.56})
+  end
+
+  local function Toggle()
+    SetConfigValue(configPath, not GetConfigValue(configPath))
+    if check.Refresh then check:Refresh() end
+  end
+
+  check:SetScript("OnClick", Toggle)
+  row:SetScript("OnMouseUp", function(_, button)
+    if button == "LeftButton" then
+      Toggle()
     end
   end)
 
+  check:Refresh()
   return row
 end
 
@@ -424,16 +510,16 @@ function UI.CreateImportPanel(panel, listPanel)
   local tipText = Controls and Controls.CreateText and
     Controls.CreateText(panel, "请在下方输入框中粘贴导入数据：", "GameFontNormal", "LABEL_COLOR")
   if tipText and tipText.SetPoint then
-    tipText:SetPoint("TOPLEFT", panel, "TOPLEFT", 20, -20)
+    tipText:SetPoint("TOPLEFT", panel, "TOPLEFT", 0, 0)
   end
 
   local scrollFrame = CreateFrame("ScrollFrame", nil, panel, "UIPanelScrollFrameTemplate")
   scrollFrame:SetPoint("TOPLEFT", tipText or panel, "BOTTOMLEFT", 0, -10)
-  scrollFrame:SetSize(560, 260)
+  scrollFrame:SetSize(624, 294)
+  StyleScrollBar(scrollFrame)
 
-  -- Input backdrop
   local inputBg = CreateFrame("Frame", nil, scrollFrame, "BackdropTemplate")
-  inputBg:SetSize(540, 260)
+  inputBg:SetSize(606, 294)
   inputBg:SetBackdrop({
     bgFile = "Interface\\Buttons\\WHITE8x8",
     edgeFile = "Interface\\Buttons\\WHITE8x8",
@@ -546,15 +632,16 @@ function UI.CreateExportPanel(panel)
   local tipText = Controls and Controls.CreateText and
     Controls.CreateText(panel, "复制下方的编码数据进行备份或分享：", "GameFontNormal", "LABEL_COLOR")
   if tipText and tipText.SetPoint then
-    tipText:SetPoint("TOPLEFT", panel, "TOPLEFT", 20, -20)
+    tipText:SetPoint("TOPLEFT", panel, "TOPLEFT", 0, 0)
   end
 
   local scrollFrame = CreateFrame("ScrollFrame", nil, panel, "UIPanelScrollFrameTemplate")
   scrollFrame:SetPoint("TOPLEFT", tipText or panel, "BOTTOMLEFT", 0, -10)
-  scrollFrame:SetSize(560, 260)
+  scrollFrame:SetSize(624, 294)
+  StyleScrollBar(scrollFrame)
 
   local displayBg = CreateFrame("Frame", nil, scrollFrame, "BackdropTemplate")
-  displayBg:SetSize(540, 260)
+  displayBg:SetSize(606, 294)
   displayBg:SetBackdrop({
     bgFile = "Interface\\Buttons\\WHITE8x8",
     edgeFile = "Interface\\Buttons\\WHITE8x8",
@@ -634,20 +721,20 @@ function UI.CreateMeetingStoneSettingsPanel(panel)
     "是否标红高亮",
     "命中笨蛋名单时，将玩家姓名或所在条目用红色高亮。",
     "meetingStone.highlightNoob",
-    startY - 68)
+    startY - 60)
   CreateConfigCheckButton(
     panel,
     "是否启用一键拒绝笨蛋",
     "后续接入集合石申请列表后，允许对命中的申请人快速拒绝。",
     "meetingStone.enableOneClickReject",
-    startY - 136)
+    startY - 120)
 
   CreateWrappedText(
     panel,
     "这些开关会先保存配置；实际集合石列表标记和拒绝逻辑将在过滤功能确认后接入。",
     subtitleText or panel,
     0,
-    -242,
+    -220,
     620)
 end
 
@@ -679,12 +766,12 @@ function UI.CreateDataManagementPanel(panel, listPanel)
   local _, subtitleText = CreatePageTitle(panel, "数据管理", "导入、导出笨蛋列表数据，用于备份或分享。")
 
   local switchContainer = CreateFrame("Frame", nil, panel)
-  switchContainer:SetPoint("TOPLEFT", subtitleText or panel, subtitleText and "BOTTOMLEFT" or "TOPLEFT", 0, -14)
+  switchContainer:SetPoint("TOPLEFT", subtitleText or panel, subtitleText and "BOTTOMLEFT" or "TOPLEFT", 0, -16)
   switchContainer:SetSize(640, 30)
 
   local content = CreateFrame("Frame", nil, panel)
-  content:SetPoint("TOPLEFT", switchContainer, "BOTTOMLEFT", 0, -12)
-  content:SetSize(640, 338)
+  content:SetPoint("TOPLEFT", switchContainer, "BOTTOMLEFT", 0, -28)
+  content:SetSize(640, 350)
 
   local importPanel = CreateFrame("Frame", nil, content)
   importPanel:SetAllPoints(content)
@@ -695,9 +782,9 @@ function UI.CreateDataManagementPanel(panel, listPanel)
   UI.CreateExportPanel(exportPanel)
 
   local importButton = Controls and Controls.CreateTabButton and
-    Controls.CreateTabButton(switchContainer, "导入数据", 100, 26, true)
+    Controls.CreateTabButton(switchContainer, "导入数据", 120, 30, true)
   local exportButton = Controls and Controls.CreateTabButton and
-    Controls.CreateTabButton(switchContainer, "导出数据", 100, 26, false)
+    Controls.CreateTabButton(switchContainer, "导出数据", 120, 30, false)
 
   if importButton then
     importButton:SetPoint("LEFT", switchContainer, "LEFT", 0, 0)
@@ -762,11 +849,8 @@ function UI.ShowManagementUI()
   sidebar:SetWidth(150)
   sidebar:SetBackdrop({
     bgFile = "Interface\\Buttons\\WHITE8x8",
-    edgeFile = "Interface\\Buttons\\WHITE8x8",
-    edgeSize = 1,
   })
-  SetColor(sidebar, "SetBackdropColor", {0.055, 0.055, 0.07, 0.72})
-  SetColor(sidebar, "SetBackdropBorderColor", {0.20, 0.20, 0.23, 0.40})
+  SetColor(sidebar, "SetBackdropColor", {0.035, 0.035, 0.045, 0.32})
 
   local contentContainer = CreateFrame("Frame", nil, frame)
   contentContainer:SetPoint("TOPLEFT", sidebar, "TOPRIGHT", 18, 0)
@@ -778,8 +862,7 @@ function UI.ShowManagementUI()
   local currentPage = 1
 
   for i, pageName in ipairs(pageNames) do
-    local navButton = Controls and Controls.CreateTabButton and
-      Controls.CreateTabButton(sidebar, pageName, 126, 34, i == 1)
+    local navButton = CreateSidebarButton(sidebar, pageName, 126, 34, i == 1)
     if navButton then
       navButton:SetPoint("TOP", sidebar, "TOP", 0, -12 - (i - 1) * 42)
       navButton.pageIndex = i
