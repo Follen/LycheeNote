@@ -1267,7 +1267,7 @@ function UI.ShowManagementUI()
 
   local navButtons = {}
   local pagePanels = {}
-  local pageNames = {"笨蛋列表", "集合石设置", "集合石过滤", "数据管理"}
+  local pageNames = {"笨蛋列表", "集合石设置", "数据管理"}
   if IsDebugPanelEnabled() then
     pageNames[#pageNames + 1] = "调试"
   end
@@ -1304,11 +1304,10 @@ function UI.ShowManagementUI()
   frame.listPanel = listPanel
 
   UI.CreateMeetingStoneSettingsPanel(pagePanels[2])
-  UI.CreateMeetingStoneFilterPanel(pagePanels[3])
-  UI.CreateDataManagementPanel(pagePanels[4], listPanel)
-  if pagePanels[5] then
-    frame.debugPanel = pagePanels[5]
-    UI.CreateDebugPanel(pagePanels[5])
+  UI.CreateDataManagementPanel(pagePanels[3], listPanel)
+  if pagePanels[4] then
+    frame.debugPanel = pagePanels[4]
+    UI.CreateDebugPanel(pagePanels[4])
   end
 
   -- Bottom bar with author
