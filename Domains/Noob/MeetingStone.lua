@@ -101,12 +101,18 @@ local function ActivityHasNoobLeader(activity)
   return GetNoobRecord(activity:GetLeader()) ~= nil
 end
 
+local function CanDeclineApplicant(applicant)
+  if not applicant or not applicant.GetStatus then return false end
+  local status = applicant:GetStatus()
+  return status == "applied" or status == "invited"
+end
+
 local function GetRememberNoobApplicantIDs(applicants)
   local ids = {}
   local seen = {}
   for _, applicant in ipairs(applicants or {}) do
     local id = applicant.GetID and applicant:GetID()
-    if id and ApplicantHasNoob(applicant) and not seen[id] then
+    if id and CanDeclineApplicant(applicant) and ApplicantHasNoob(applicant) and not seen[id] then
       seen[id] = true
       ids[#ids + 1] = id
     end
@@ -455,7 +461,8 @@ local function HookApplicantPanel()
     function ApplicantPanel:UpdateRememberNoobRejectButton()
       if oldUpdateRejectButton then
         oldUpdateRejectButton(self)
-      elseif self.RememberNoobRejectButton then
+      end
+      if self.RememberNoobRejectButton then
         local count = #GetRememberNoobApplicantIDs(self.ApplicantList and self.ApplicantList:GetItemList())
         self.RememberNoobRejectButton:SetEnabled(count > 0)
         self.RememberNoobRejectButton:SetText(count > 0 and ("拒绝笨蛋(" .. count .. ")") or "拒绝笨蛋")
@@ -483,6 +490,17 @@ local function HookApplicantPanel()
       end
       if self.UpdateApplicantsList then
         self:UpdateApplicantsList()
+      end
+    end
+  end
+
+  if not ApplicantPanel.__RememberNoobApplicantUpdatedHooked and ApplicantPanel.LFG_LIST_APPLICANT_UPDATED then
+    ApplicantPanel.__RememberNoobApplicantUpdatedHooked = true
+    local oldApplicantUpdated = ApplicantPanel.LFG_LIST_APPLICANT_UPDATED
+    function ApplicantPanel:LFG_LIST_APPLICANT_UPDATED(...)
+      oldApplicantUpdated(self, ...)
+      if self.UpdateRememberNoobRejectButton then
+        self:UpdateRememberNoobRejectButton()
       end
     end
   end
