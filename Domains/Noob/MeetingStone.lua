@@ -208,7 +208,7 @@ local function AddFilterLogActivity(activity)
   local line, displayLine = BuildFilterLogLineFromActivity(activity)
   if not line or line == "" then return false end
   local code = SafeCFunction(activity.GetCode, activity) or SafeCFunction(activity.GetID, activity) or line
-  local key = tostring(code) .. "\t" .. line
+  local key = tostring(code)
   if filterLogSeen[key] then return false end
 
   filterLogSeen[key] = true
@@ -629,14 +629,26 @@ function MeetingStone.GetFilterLogText()
 end
 
 function MeetingStone.GetFilterLogDisplayText()
-  if #filterLogDisplayLines == 0 then
+  if #filterLogLines == 0 then
     return filterLogDisplayHeader
   end
-  return filterLogDisplayHeader .. "\n" .. table.concat(filterLogDisplayLines, "\n")
+  local lines = {filterLogDisplayHeader}
+  for i = 1, #filterLogLines do
+    lines[#lines + 1] = filterLogDisplayLines[i] or filterLogLines[i]:gsub("\t", " | ")
+  end
+  return table.concat(lines, "\n")
 end
 
 function MeetingStone.GetFilterLogCount()
   return #filterLogLines
+end
+
+function MeetingStone.GetFilterLogDisplayRows()
+  local rows = {filterLogDisplayHeader}
+  for i = 1, #filterLogLines do
+    rows[#rows + 1] = filterLogDisplayLines[i] or filterLogLines[i]:gsub("\t", " | ")
+  end
+  return rows
 end
 
 function MeetingStone.GetFilterLogStatus()

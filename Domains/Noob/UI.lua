@@ -842,6 +842,7 @@ function UI.RefreshDebugLogPanel()
   local status = meetingStone and meetingStone.GetFilterLogStatus and meetingStone.GetFilterLogStatus() or ""
   local text = meetingStone and meetingStone.GetFilterLogText and meetingStone.GetFilterLogText() or ""
   local displayText = meetingStone and meetingStone.GetFilterLogDisplayText and meetingStone.GetFilterLogDisplayText() or text
+  local rows = meetingStone and meetingStone.GetFilterLogDisplayRows and meetingStone.GetFilterLogDisplayRows() or nil
 
   if panel.logButton and panel.logButton.label then
     panel.logButton.label:SetText(enabled and "关闭集合石过滤日志" or "开启集合石过滤日志")
@@ -858,12 +859,37 @@ function UI.RefreshDebugLogPanel()
   for _ in string.gmatch(displayText, "\n") do
     lineCount = lineCount + 1
   end
+  if type(rows) == "table" and #rows > 0 then
+    lineCount = #rows
+  end
   local contentHeight = math.max(316, lineCount * 16 + 20)
 
+  if panel.logRows then
+    for i = 1, #panel.logRows do
+      panel.logRows[i]:Hide()
+    end
+  end
+  if panel.logBg and type(rows) == "table" then
+    panel.logRows = panel.logRows or {}
+    for i, line in ipairs(rows) do
+      local row = panel.logRows[i]
+      if not row then
+        row = panel.logBg:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        row:SetJustifyH("LEFT")
+        row:SetWordWrap(false)
+        row:SetWidth(600)
+        SetColor(row, "SetTextColor", {0.92, 0.92, 0.95, 1})
+        panel.logRows[i] = row
+      end
+      row:SetPoint("TOPLEFT", panel.logBg, "TOPLEFT", 8, -8 - (i - 1) * 16)
+      row:SetText(line)
+      row:Show()
+    end
+  end
+
   if panel.logText then
-    panel.logText:SetText(displayText)
-    panel.logText:SetHeight(contentHeight - 16)
-    panel.logText:Show()
+    panel.logText:SetText("")
+    panel.logText:Hide()
   end
   if panel.copyBox then
     panel.copyBox:SetText(displayText)
@@ -1016,6 +1042,7 @@ function UI.CreateDebugPanel(panel)
   panel.logBg = logBg
   panel.logText = logText
   panel.copyBox = copyBox
+  panel.logRows = {}
   EnableDebugLogCopy(panel)
   panel:SetScript("OnShow", UI.RefreshDebugLogPanel)
   UI.RefreshDebugLogPanel()
