@@ -380,12 +380,12 @@ end
 
 local function CreateDebugCategoryDropdown(parent)
   local menuTable = {
-    {text = "地下堡", value = "delve", categoryID = 121},
-    {text = "地下城", value = "dungeon", categoryID = 2},
-    {text = "团队副本", value = "raid", categoryID = 3},
-    {text = "PVP", value = "pvp", categoryID = 8},
-    {text = "自定义", value = "custom", categoryID = 6},
-    {text = "任务", value = "quest", categoryID = 1},
+    {text = "地下堡", value = "delve", categoryID = 121, baseFilter = Enum and Enum.LFGListFilter and Enum.LFGListFilter.PvE or 1},
+    {text = "地下城", value = "dungeon", categoryID = 2, baseFilter = Enum and Enum.LFGListFilter and Enum.LFGListFilter.PvE or 1},
+    {text = "团队副本", value = "raid", categoryID = 3, baseFilter = Enum and Enum.LFGListFilter and Enum.LFGListFilter.PvE or 1},
+    {text = "PVP", value = "pvp", categoryID = 8, baseFilter = Enum and Enum.LFGListFilter and Enum.LFGListFilter.PvP or 2},
+    {text = "自定义", value = "custom", categoryID = 6, baseFilter = Enum and Enum.LFGListFilter and Enum.LFGListFilter.PvE or 1},
+    {text = "任务", value = "quest", categoryID = 1, baseFilter = Enum and Enum.LFGListFilter and Enum.LFGListFilter.PvE or 1},
   }
 
   local dropdown = CreateFrame("Button", nil, parent, "BackdropTemplate")
@@ -831,6 +831,7 @@ function UI.RefreshDebugLogPanel()
   local meetingStone = ns.RememberNoobMeetingStone
   local enabled = meetingStone and meetingStone.IsFilterLogEnabled and meetingStone.IsFilterLogEnabled()
   local count = meetingStone and meetingStone.GetFilterLogCount and meetingStone.GetFilterLogCount() or 0
+  local status = meetingStone and meetingStone.GetFilterLogStatus and meetingStone.GetFilterLogStatus() or ""
   local text = meetingStone and meetingStone.GetFilterLogText and meetingStone.GetFilterLogText() or ""
   local displayText = meetingStone and meetingStone.GetFilterLogDisplayText and meetingStone.GetFilterLogDisplayText() or text
 
@@ -838,7 +839,7 @@ function UI.RefreshDebugLogPanel()
     panel.logButton.label:SetText(enabled and "关闭集合石过滤日志" or "开启集合石过滤日志")
   end
   if panel.countText then
-    panel.countText:SetText("记录：" .. count)
+    panel.countText:SetText("记录：" .. count .. (status ~= "" and ("  " .. status) or ""))
   end
   if panel.logText then
     panel.logText:SetText(displayText)

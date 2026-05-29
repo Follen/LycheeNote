@@ -15,6 +15,7 @@ local filterLogNotifyPending = false
 local filterLogScanToken = 0
 local debugSearchCategoryID = 121
 local debugSearchBaseFilter = Enum and Enum.LFGListFilter and Enum.LFGListFilter.PvE or 1
+local debugLogStatus = "待搜索"
 
 local function GetMeetingStoneEnv()
   local ok, env = pcall(function()
@@ -163,9 +164,11 @@ end
 
 local function RecordCurrentSearchResults()
   if not filterLogEnabled or not C_LFGList or not C_LFGList.GetSearchResults then return end
-  local ok, _, results = pcall(C_LFGList.GetSearchResults)
+  local ok, first, second = pcall(C_LFGList.GetSearchResults)
   if not ok then return end
+  local results = type(second) == "table" and second or type(first) == "table" and first or nil
   if type(results) ~= "table" then return end
+  debugLogStatus = "结果: " .. #results
 
   filterLogScanToken = filterLogScanToken + 1
   local token = filterLogScanToken
@@ -192,15 +195,22 @@ end
 function MeetingStone.SearchDebugCategory(categoryID, baseFilter)
   debugSearchCategoryID = categoryID or debugSearchCategoryID
   debugSearchBaseFilter = baseFilter
+  debugLogStatus = "搜索中: " .. tostring(debugSearchCategoryID)
+  NotifyFilterLogChanged()
 
   if C_LFGList and C_LFGList.Search then
     local languages = C_LFGList.GetLanguageSearchFilter and C_LFGList.GetLanguageSearchFilter()
     local advancedFilter = debugSearchCategoryID == 2 and C_LFGList.GetAdvancedFilter and C_LFGList.GetAdvancedFilter()
     local filterValue = 0
     if debugSearchCategoryID == 2 and Enum and Enum.LFGListFilter and bit then
-      filterValue = bit.band(bit.bnot(Enum.LFGListFilter.NotRecommended), bit.bor(0, Enum.LFGListFilter.Recommended))
+      filterValue = bit.band(bit.bnot(Enum.LFGListFilter.NotRecommended), Enum.LFGListFilter.Recommended)
     end
-    pcall(C_LFGList.Search, debugSearchCategoryID, filterValue, nil, languages, nil, advancedFilter)
+    local ok, err = pcall(C_LFGList.Search, debugSearchCategoryID, filterValue, debugSearchBaseFilter or 0, languages, nil, advancedFilter)
+    if not ok then
+      debugLogStatus = "搜索失败: " .. tostring(err)
+      NotifyFilterLogChanged()
+      return false
+    end
     if C_Timer and C_Timer.After then
       C_Timer.After(0.5, RecordCurrentSearchResults)
       C_Timer.After(1.5, RecordCurrentSearchResults)
@@ -479,6 +489,10 @@ end
 
 function MeetingStone.GetFilterLogCount()
   return #filterLogLines
+end
+
+function MeetingStone.GetFilterLogStatus()
+  return debugLogStatus
 end
 
 local function HookApplicantClass()
@@ -827,9 +841,15 @@ function MeetingStone.Initialize()
   frame:RegisterEvent("PLAYER_LOGIN")
   frame:RegisterEvent("LFG_LIST_SEARCH_RESULTS_RECEIVED")
   frame:RegisterEvent("LFG_LIST_SEARCH_RESULT_UPDATED")
+  frame:RegisterEvent("LFG_LIST_SEARCH_FAILED")
   frame:SetScript("OnEvent", function(self, event, addonName)
     if event == "LFG_LIST_SEARCH_RESULTS_RECEIVED" or event == "LFG_LIST_SEARCH_RESULT_UPDATED" then
       RecordCurrentSearchResults()
+      return
+    end
+    if event == "LFG_LIST_SEARCH_FAILED" then
+      debugLogStatus = "搜索失败事件"
+      NotifyFilterLogChanged()
       return
     end
     if event == "ADDON_LOADED" and addonName ~= "MeetingStone" then return end
