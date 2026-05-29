@@ -923,16 +923,28 @@ local function EnableDebugLogCopy(panel)
 end
 
 local function SelectDebugLog(panel)
-  if not panel or not panel.copyBox then return end
+  if not panel then return end
   UI.RefreshDebugLogPanel()
+  local text = ""
+  local rows
+  if ns.RememberNoobMeetingStone then
+    if ns.RememberNoobMeetingStone.GetFilterLogText then
+      text = ns.RememberNoobMeetingStone.GetFilterLogText() or ""
+    end
+    if ns.RememberNoobMeetingStone.GetFilterLogDisplayRows then
+      rows = ns.RememberNoobMeetingStone.GetFilterLogDisplayRows()
+    end
+  elseif panel.copyBox then
+    text = panel.copyBox:GetText() or ""
+  end
   if UI.ShowDebugLogCopyFrame then
-    UI.ShowDebugLogCopyFrame(panel.copyBox:GetText() or "")
+    UI.ShowDebugLogCopyFrame(text, rows)
     return
   end
   print("|cff00ff00RememberNoob: 已全选 Lua 数据，按 Ctrl+C 复制|r")
 end
 
-function UI.ShowDebugLogCopyFrame(text)
+function UI.ShowDebugLogCopyFrame(text, rows)
   if not UI.debugLogCopyFrame then
     local frame = CreateFrame("Frame", "RememberNoobDebugLogCopyFrame", UIParent, "BackdropTemplate")
     frame:SetSize(720, 500)
@@ -997,6 +1009,7 @@ function UI.ShowDebugLogCopyFrame(text)
     end)
     scrollFrame:SetScrollChild(bg)
 
+    frame.rows = {}
     if selectButton then
       selectButton:SetScript("OnClick", function()
         editBox:SetFocus()
@@ -1017,7 +1030,36 @@ function UI.ShowDebugLogCopyFrame(text)
   for _ in string.gmatch(text or "", "\n") do
     lineCount = lineCount + 1
   end
+  if type(rows) == "table" and #rows > 0 then
+    lineCount = #rows
+  end
   frame.bg:SetHeight(math.max(410, lineCount * 16 + 24))
+  if frame.rows then
+    for i = 1, #frame.rows do
+      frame.rows[i]:Hide()
+    end
+  end
+  if type(rows) ~= "table" then
+    rows = {}
+    for line in (text or ""):gmatch("[^\n]+") do
+      rows[#rows + 1] = line
+    end
+  end
+  for i, line in ipairs(rows) do
+    local row = frame.rows[i]
+    if not row then
+      row = frame.bg:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+      row:SetJustifyH("LEFT")
+      row:SetWordWrap(false)
+      row:SetWidth(620)
+      SetColor(row, "SetTextColor", {0.92, 0.92, 0.95, 1})
+      frame.rows[i] = row
+    end
+    row:SetPoint("TOPLEFT", frame.bg, "TOPLEFT", 10, -10 - (i - 1) * 16)
+    row:SetText(line)
+    row:Show()
+  end
+  frame.editBox:SetAlpha(0.01)
   frame.editBox:SetFocus()
   frame.editBox:HighlightText()
   print("|cff00ff00RememberNoob: 已打开 Lua 数据复制框，按 Ctrl+C 复制|r")
