@@ -5,6 +5,7 @@ ns.RememberNoobMeetingStone = MeetingStone
 
 local hooked = false
 local filterLogEnabled = false
+local filterLogRecords = {}
 local filterLogLines = {}
 local filterLogDisplayLines = {}
 local filterLogSeen = {}
@@ -76,6 +77,13 @@ local function CleanLogValue(value)
   value = tostring(value)
   value = value:gsub("[\r\n\t]+", " ")
   value = value:gsub("^%s+", ""):gsub("%s+$", "")
+  return value
+end
+
+local function EscapeLuaString(value)
+  value = CleanLogValue(value)
+  value = value:gsub("\\", "\\\\")
+  value = value:gsub("\"", "\\\"")
   return value
 end
 
@@ -180,42 +188,69 @@ local function ClearMeetingStoneSearchText()
   end
 end
 
-local function BuildFilterLogLineFromActivity(activity)
+local function BuildFilterLogRecordFromActivity(activity)
   if not activity then return nil end
   local activityID = SafeCFunction(activity.GetActivityID, activity)
   local activityInfo = GetActivityInfo(activityID)
-  local name = SafeCFunction(activity.GetName, activity) or ""
-  local title = SafeCFunction(activity.GetSummary, activity) or ""
-  local leader = SafeCFunction(activity.GetLeader, activity) or ""
-  local comment = SafeCFunction(activity.GetComment, activity) or ""
-  local fields = {
-    date("%H:%M:%S"),
-    GetActivityCategoryNameFromActivity(activity, activityInfo),
-    GetActivityTypeName(activity, activityInfo),
-    name,
-    title,
-    leader,
-    comment,
+  return {
+    time = date("%Y-%m-%d %H:%M:%S"),
+    category = CleanLogValue(GetActivityCategoryNameFromActivity(activity, activityInfo)),
+    activityType = CleanLogValue(GetActivityTypeName(activity, activityInfo)),
+    activityName = CleanLogValue(SafeCFunction(activity.GetName, activity) or ""),
+    title = CleanLogValue(SafeCFunction(activity.GetSummary, activity) or ""),
+    leader = CleanLogValue(SafeCFunction(activity.GetLeader, activity) or ""),
+    comment = CleanLogValue(SafeCFunction(activity.GetComment, activity) or ""),
   }
+end
 
-  for i, value in ipairs(fields) do
-    fields[i] = CleanLogValue(value)
+local function BuildFilterLogLineFromRecord(record, separator)
+  if not record then return nil end
+  separator = separator or "\t"
+  return table.concat({
+    record.time or "",
+    record.category or "",
+    record.activityType or "",
+    record.activityName or "",
+    record.title or "",
+    record.leader or "",
+    record.comment or "",
+  }, separator)
+end
+
+local function BuildFilterLogSavedVariables()
+  local lines = {"RememberNoobMeetingStoneFilterLog = {"}
+  for index, record in ipairs(filterLogRecords) do
+    lines[#lines + 1] = "  [" .. index .. "] = {"
+    lines[#lines + 1] = "    time = \"" .. EscapeLuaString(record.time) .. "\","
+    lines[#lines + 1] = "    category = \"" .. EscapeLuaString(record.category) .. "\","
+    lines[#lines + 1] = "    activityType = \"" .. EscapeLuaString(record.activityType) .. "\","
+    lines[#lines + 1] = "    activityName = \"" .. EscapeLuaString(record.activityName) .. "\","
+    lines[#lines + 1] = "    title = \"" .. EscapeLuaString(record.title) .. "\","
+    lines[#lines + 1] = "    leader = \"" .. EscapeLuaString(record.leader) .. "\","
+    lines[#lines + 1] = "    comment = \"" .. EscapeLuaString(record.comment) .. "\","
+    lines[#lines + 1] = "  },"
   end
-  return table.concat(fields, "\t"), table.concat(fields, " | ")
+  lines[#lines + 1] = "}"
+  return table.concat(lines, "\n")
 end
 
 local function AddFilterLogActivity(activity)
-  local line, displayLine = BuildFilterLogLineFromActivity(activity)
-  if not line or line == "" then return false end
-  local code = SafeCFunction(activity.GetCode, activity) or SafeCFunction(activity.GetID, activity) or line
+  local record = BuildFilterLogRecordFromActivity(activity)
+  if not record then return false end
+  local code = SafeCFunction(activity.GetCode, activity) or SafeCFunction(activity.GetID, activity) or
+    (record.leader .. ":" .. record.title .. ":" .. record.activityName)
   local key = tostring(code)
   if filterLogSeen[key] then return false end
 
   filterLogSeen[key] = true
+  filterLogRecords[#filterLogRecords + 1] = record
+  local line = BuildFilterLogLineFromRecord(record, "\t")
+  local displayLine = BuildFilterLogLineFromRecord(record, " | ")
   filterLogLines[#filterLogLines + 1] = line
   filterLogDisplayLines[#filterLogDisplayLines + 1] = displayLine or line:gsub("\t", " | ")
   if #filterLogLines > filterLogLimit then
     local removed = table.remove(filterLogLines, 1)
+    table.remove(filterLogRecords, 1)
     table.remove(filterLogDisplayLines, 1)
     if removed then
       for seenKey in pairs(filterLogSeen) do
@@ -230,6 +265,7 @@ local function AddFilterLogActivity(activity)
 end
 
 local function ResetFilterLog()
+  table.wipe(filterLogRecords)
   table.wipe(filterLogLines)
   table.wipe(filterLogDisplayLines)
   table.wipe(filterLogSeen)
@@ -622,21 +658,11 @@ function MeetingStone.ToggleFilterLog()
 end
 
 function MeetingStone.GetFilterLogText()
-  if #filterLogLines == 0 then
-    return filterLogHeader
-  end
-  return filterLogHeader .. "\n" .. table.concat(filterLogLines, "\n")
+  return BuildFilterLogSavedVariables()
 end
 
 function MeetingStone.GetFilterLogDisplayText()
-  if #filterLogLines == 0 then
-    return filterLogDisplayHeader
-  end
-  local lines = {filterLogDisplayHeader}
-  for i = 1, #filterLogLines do
-    lines[#lines + 1] = filterLogDisplayLines[i] or filterLogLines[i]:gsub("\t", " | ")
-  end
-  return table.concat(lines, "\n")
+  return BuildFilterLogSavedVariables()
 end
 
 function MeetingStone.GetFilterLogCount()
@@ -644,9 +670,9 @@ function MeetingStone.GetFilterLogCount()
 end
 
 function MeetingStone.GetFilterLogDisplayRows()
-  local rows = {filterLogDisplayHeader}
-  for i = 1, #filterLogLines do
-    rows[#rows + 1] = filterLogDisplayLines[i] or filterLogLines[i]:gsub("\t", " | ")
+  local rows = {}
+  for line in BuildFilterLogSavedVariables():gmatch("[^\n]+") do
+    rows[#rows + 1] = line
   end
   return rows
 end

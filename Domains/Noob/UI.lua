@@ -930,7 +930,7 @@ local function SelectDebugLog(panel)
   panel.copyBox:SetEnabled(true)
   panel.copyBox:SetFocus()
   panel.copyBox:HighlightText()
-  print("|cff00ff00RememberNoob: 已全选调试日志，按 Ctrl+C 复制|r")
+  print("|cff00ff00RememberNoob: 已全选 Lua 数据，按 Ctrl+C 复制|r")
 end
 
 local function UpdateDebugLogHeight(panel)
@@ -963,7 +963,7 @@ function UI.CreateDebugPanel(panel)
   end
 
   local selectButton = Controls and Controls.CreateButton and
-    Controls.CreateButton(panel, "全选日志", 88, 28)
+    Controls.CreateButton(panel, "复制 Lua", 88, 28)
   if selectButton and selectButton.SetPoint then
     selectButton:SetPoint("RIGHT", logButton, "LEFT", -8, 0)
   end
