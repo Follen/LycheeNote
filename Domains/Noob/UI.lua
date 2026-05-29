@@ -746,12 +746,15 @@ function UI.RefreshDebugLogPanel()
   if panel.countText then
     panel.countText:SetText("记录：" .. count)
   end
-  if panel.editBox then
-    panel.editBox:SetText(text)
-    panel.editBox:SetCursorPosition(0)
-    if panel.logBg and panel.editBox.GetStringHeight then
-      panel.logBg:SetHeight(math.max(316, math.ceil(panel.editBox:GetStringHeight() + 20)))
+  if panel.logText then
+    panel.logText:SetText(text)
+    if panel.logBg and panel.logText.GetStringHeight then
+      panel.logBg:SetHeight(math.max(316, math.ceil(panel.logText:GetStringHeight() + 20)))
     end
+  end
+  if panel.copyBox then
+    panel.copyBox:SetText(text)
+    panel.copyBox:SetCursorPosition(0)
   end
 end
 
@@ -761,7 +764,7 @@ function UI.CreateDebugPanel(panel)
   local logButton = Controls and Controls.CreateButton and
     Controls.CreateButton(panel, "开启集合石过滤日志", 150, 28)
   if logButton and logButton.SetPoint then
-    logButton:SetPoint("TOPRIGHT", titleText or panel, titleText and "BOTTOMRIGHT" or "TOPRIGHT", 0, -18)
+    logButton:SetPoint("TOPRIGHT", panel, "TOPRIGHT", 0, -42)
   end
 
   local countText = Controls and Controls.CreateText and
@@ -771,7 +774,7 @@ function UI.CreateDebugPanel(panel)
   end
 
   local scrollFrame = CreateFrame("ScrollFrame", nil, panel, "UIPanelScrollFrameTemplate")
-  scrollFrame:SetPoint("TOPLEFT", titleText or panel, titleText and "BOTTOMLEFT" or "TOPLEFT", 0, -60)
+  scrollFrame:SetPoint("TOPLEFT", panel, "TOPLEFT", 0, -84)
   scrollFrame:SetSize(640, 316)
   StyleScrollBar(scrollFrame)
 
@@ -785,20 +788,29 @@ function UI.CreateDebugPanel(panel)
   SetColor(logBg, "SetBackdropColor", {0.12, 0.12, 0.14, 0.90})
   SetColor(logBg, "SetBackdropBorderColor", {0.22, 0.22, 0.26, 0.70})
 
-  local editBox = CreateFrame("EditBox", nil, logBg)
-  editBox:SetPoint("TOPLEFT", logBg, "TOPLEFT", 8, -8)
-  editBox:SetPoint("BOTTOMRIGHT", logBg, "BOTTOMRIGHT", -8, 8)
-  editBox:SetMultiLine(true)
-  editBox:SetAutoFocus(false)
-  editBox:SetFont("Fonts\\ARKai_T.ttf", 13, "")
-  editBox:SetTextColor(0.92, 0.92, 0.95, 1)
-  editBox:SetJustifyH("LEFT")
-  editBox:SetJustifyV("TOP")
-  editBox:SetMaxLetters(200000)
-  editBox:SetCursorPosition(0)
-  editBox:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
-  editBox:SetScript("OnMouseDown", function(self, button)
-    if button == "LeftButton" then self:SetFocus() end
+  local logText = logBg:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+  logText:SetPoint("TOPLEFT", logBg, "TOPLEFT", 8, -8)
+  logText:SetPoint("RIGHT", logBg, "RIGHT", -8, 0)
+  logText:SetJustifyH("LEFT")
+  logText:SetJustifyV("TOP")
+  logText:SetWordWrap(false)
+  SetColor(logText, "SetTextColor", {0.92, 0.92, 0.95, 1})
+
+  local copyBox = CreateFrame("EditBox", nil, logBg)
+  copyBox:SetPoint("TOPLEFT", logBg, "TOPLEFT", 8, -8)
+  copyBox:SetPoint("BOTTOMRIGHT", logBg, "BOTTOMRIGHT", -8, 8)
+  copyBox:SetMultiLine(true)
+  copyBox:SetAutoFocus(false)
+  copyBox:SetFontObject("GameFontNormalSmall")
+  copyBox:SetTextColor(0, 0, 0, 0)
+  copyBox:SetAlpha(0.01)
+  copyBox:SetMaxLetters(200000)
+  copyBox:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+  copyBox:SetScript("OnMouseDown", function(self, button)
+    if button == "LeftButton" then
+      self:SetFocus()
+      self:HighlightText()
+    end
   end)
   scrollFrame:SetScrollChild(logBg)
 
@@ -814,7 +826,8 @@ function UI.CreateDebugPanel(panel)
   panel.logButton = logButton
   panel.countText = countText
   panel.logBg = logBg
-  panel.editBox = editBox
+  panel.logText = logText
+  panel.copyBox = copyBox
   panel:SetScript("OnShow", UI.RefreshDebugLogPanel)
   UI.RefreshDebugLogPanel()
 end
