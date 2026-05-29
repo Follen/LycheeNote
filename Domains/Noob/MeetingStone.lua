@@ -196,6 +196,11 @@ local function CreateRejectButton(applicantPanel, managerPanel)
   button:SetHighlightFontObject("GameFontHighlight")
   button:SetDisabledFontObject("GameFontDisable")
   if button.Icon then button.Icon:Hide() end
+  local label = button.GetFontString and button:GetFontString()
+  if label then
+    label:ClearAllPoints()
+    label:SetPoint("CENTER", button, "CENTER", 0, 0)
+  end
   button:SetScript("OnClick", function()
     if applicantPanel.DeclineRememberNoobs then
       applicantPanel:DeclineRememberNoobs()
