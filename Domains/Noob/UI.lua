@@ -378,6 +378,52 @@ local function CreateConfigCheckButton(parent, label, configPath, yOffset)
   return row
 end
 
+local function CreateDebugCategoryDropdown(parent)
+  local menuTable = {
+    {text = "地下堡", value = "delve", categoryID = 121, baseFilter = Enum and Enum.LFGListFilter and Enum.LFGListFilter.PvE or 1},
+    {text = "地下城", value = "dungeon", categoryID = 2, baseFilter = Enum and Enum.LFGListFilter and Enum.LFGListFilter.PvE or 1},
+    {text = "团队副本", value = "raid", categoryID = 3, baseFilter = Enum and Enum.LFGListFilter and Enum.LFGListFilter.PvE or 1},
+    {text = "PVP", value = "pvp", categoryID = 8, baseFilter = Enum and Enum.LFGListFilter and Enum.LFGListFilter.PvP or 2},
+    {text = "自定义", value = "custom", categoryID = 6, baseFilter = Enum and Enum.LFGListFilter and Enum.LFGListFilter.PvE or 1},
+    {text = "任务", value = "quest", categoryID = 1, baseFilter = Enum and Enum.LFGListFilter and Enum.LFGListFilter.PvE or 1},
+  }
+
+  local dropdown
+  local GUI = LibStub and LibStub("NetEaseGUI-2.0", true)
+  local Dropdown = GUI and GUI.GetClass and GUI:GetClass("Dropdown")
+  if Dropdown and Dropdown.New then
+    dropdown = Dropdown:New(parent)
+    dropdown:SetSize(150, 28)
+    dropdown:SetMenuTable(menuTable)
+    dropdown:SetMaxItem(8)
+    dropdown:SetItem(menuTable[1])
+  else
+    dropdown = Controls and Controls.CreateButton and Controls.CreateButton(parent, menuTable[1].text, 150, 28)
+    dropdown.item = menuTable[1]
+    dropdown.GetItem = function(self) return self.item end
+  end
+
+  if dropdown and dropdown.SetCallback then
+    dropdown:SetCallback("OnSelectChanged", function(_, item)
+      if ns.RememberNoobMeetingStone and ns.RememberNoobMeetingStone.SearchDebugCategory then
+        ns.RememberNoobMeetingStone.SearchDebugCategory(item.categoryID, item.baseFilter)
+      end
+    end)
+  elseif dropdown and dropdown.SetScript then
+    dropdown:SetScript("OnClick", function(self)
+      self.__rnIndex = (self.__rnIndex or 1) + 1
+      if self.__rnIndex > #menuTable then self.__rnIndex = 1 end
+      self.item = menuTable[self.__rnIndex]
+      if self.label then self.label:SetText(self.item.text) end
+      if ns.RememberNoobMeetingStone and ns.RememberNoobMeetingStone.SearchDebugCategory then
+        ns.RememberNoobMeetingStone.SearchDebugCategory(self.item.categoryID, self.item.baseFilter)
+      end
+    end)
+  end
+
+  return dropdown
+end
+
 function UI.CreateListPanel(listPanel)
   local headers = {"玩家姓名", "服务器名称", "职业专精", "加入时间", "加入原因"}
   local columnWidths = {100, 95, 115, 85, 225}
@@ -769,6 +815,11 @@ end
 function UI.CreateDebugPanel(panel)
   local titleText = CreatePageTitle(panel, "调试")
 
+  local categoryDropdown = CreateDebugCategoryDropdown(panel)
+  if categoryDropdown and categoryDropdown.SetPoint then
+    categoryDropdown:SetPoint("TOPLEFT", panel, "TOPLEFT", 0, -42)
+  end
+
   local logButton = Controls and Controls.CreateButton and
     Controls.CreateButton(panel, "开启集合石过滤日志", 150, 28)
   if logButton and logButton.SetPoint then
@@ -827,10 +878,15 @@ function UI.CreateDebugPanel(panel)
       if ns.RememberNoobMeetingStone and ns.RememberNoobMeetingStone.ToggleFilterLog then
         ns.RememberNoobMeetingStone.ToggleFilterLog()
       end
+      local item = categoryDropdown and categoryDropdown.GetItem and categoryDropdown:GetItem()
+      if item and ns.RememberNoobMeetingStone and ns.RememberNoobMeetingStone.SearchDebugCategory then
+        ns.RememberNoobMeetingStone.SearchDebugCategory(item.categoryID, item.baseFilter)
+      end
       UI.RefreshDebugLogPanel()
     end)
   end
 
+  panel.categoryDropdown = categoryDropdown
   panel.logButton = logButton
   panel.countText = countText
   panel.logBg = logBg

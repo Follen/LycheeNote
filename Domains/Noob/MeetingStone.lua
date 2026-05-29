@@ -13,6 +13,8 @@ local filterLogDisplayHeader = "时间 | 活动分类 | 活动类型 | 活动名
 local filterLogLimit = 500
 local filterLogNotifyPending = false
 local filterLogScanToken = 0
+local debugSearchCategoryID = 121
+local debugSearchBaseFilter = Enum and Enum.LFGListFilter and Enum.LFGListFilter.PvE or 1
 
 local function GetMeetingStoneEnv()
   local ok, env = pcall(function()
@@ -185,6 +187,20 @@ local function RecordCurrentSearchResults()
   end
 
   ScanBatch()
+end
+
+function MeetingStone.SearchDebugCategory(categoryID, baseFilter)
+  debugSearchCategoryID = categoryID or debugSearchCategoryID
+  debugSearchBaseFilter = baseFilter
+
+  if C_LFGList and C_LFGList.Search then
+    local languages = C_LFGList.GetLanguageSearchFilter and C_LFGList.GetLanguageSearchFilter()
+    local advancedFilter = debugSearchCategoryID == 2 and C_LFGList.GetAdvancedFilter and C_LFGList.GetAdvancedFilter()
+    local filterValue = debugSearchBaseFilter or 0
+    pcall(C_LFGList.Search, debugSearchCategoryID, filterValue, 0, languages, nil, advancedFilter)
+    return true
+  end
+  return false
 end
 
 local function NormalizeName(name)
