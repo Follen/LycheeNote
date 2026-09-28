@@ -1,17 +1,21 @@
-local ADDON_NAME, ns = ...
+--- 荔枝笔记配置层
+-- SavedVariables 的唯一所有者：LycheeNoteDB（存档文件 LycheeNote.lua）。
+-- 热路径不反复解析 db，只在低频入口读取快照。
 
-ns.Config = {}
+local ADDON_NAME, ns = ...
+local LN = ns.LycheeNote
+
+local Config = {}
+LN.Config = Config
+
+Config.DB = "LycheeNoteDB"
+
+local SCHEMA_VERSION = 3
 
 local defaults = {
+  schemaVersion = SCHEMA_VERSION,
   enabled = true,
-  meetingStone = {
-    showIcon = true,
-    highlightNoob = true,
-    enableOneClickReject = false,
-  },
-  debug = {
-    showPanel = false,
-  },
+  askReason = true,
 }
 
 local function CopyDefaults(src, dst)
@@ -25,15 +29,18 @@ local function CopyDefaults(src, dst)
   end
 end
 
-function ns.Config.Initialize()
-  RememberNoobDB = RememberNoobDB or {}
-  CopyDefaults(defaults, RememberNoobDB)
-  RememberNoobDB.noobs = RememberNoobDB.noobs or {}
-  ns.db = RememberNoobDB
+function Config.Initialize()
+  _G[Config.DB] = type(_G[Config.DB]) == "table" and _G[Config.DB] or {}
+  local db = _G[Config.DB]
+  db.records = type(db.records) == "table" and db.records or {}
+  CopyDefaults(defaults, db)
+  db.schemaVersion = SCHEMA_VERSION
+  LN.db = db
+  return db
 end
 
-function ns.Config.Get(path)
-  local node = ns.db
+function Config.Get(path)
+  local node = LN.db
   for part in string.gmatch(path, "[^.]+") do
     if type(node) ~= "table" then return nil end
     node = node[part]
@@ -41,15 +48,33 @@ function ns.Config.Get(path)
   return node
 end
 
-function ns.Config.Set(path, value)
-  local node = ns.db
+function Config.Set(path, value)
+  local node = LN.db
+  if type(node) ~= "table" then return false end
   local last
   for part in string.gmatch(path, "[^.]+") do
     if last then
-      node[last] = node[last] or {}
+      node[last] = type(node[last]) == "table" and node[last] or {}
       node = node[last]
     end
     last = part
   end
   if last then node[last] = value end
+  return true
+end
+
+function Config.GetBool(path)
+  return Config.Get(path) == true
+end
+
+function Config.SetBool(path, value)
+  return Config.Set(path, value and true or false)
+end
+
+function Config.IsEnabled()
+  return Config.GetBool("enabled")
+end
+
+function Config.AskReason()
+  return Config.GetBool("askReason")
 end

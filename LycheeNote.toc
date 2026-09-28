@@ -1,0 +1,28 @@
+## Interface: 120100
+## Title: |cffd53c49荔枝笔记|r
+## Title-zhCN: |cffd53c49荔枝笔记|r
+## Title-zhTW: |cffd53c49荔枝筆記|r
+## Notes: 记录你在团本大秘境遇到的笨蛋
+## Notes-zhCN: 记录你在团本大秘境遇到的笨蛋
+## Notes-zhTW: 記錄你在團本大秘境遇到的笨蛋
+## Author: 晴昼秋岚#5278
+## IconTexture: Interface\AddOns\LycheeNote\Media\lychee-logo.tga
+## Version: 1.0.0
+## SavedVariables: LycheeNoteDB
+
+Core\Bootstrap.lua
+
+Shared\Theme.lua
+Shared\Components.lua
+Shared\Layer.lua
+
+Core\Config.lua
+Core\Init.lua
+
+Domains\Note\Note.lua
+Domains\Note\Inspect.lua
+Domains\Note\Events.lua
+Domains\Note\Menus.lua
+Domains\Note\MeetingStone.lua
+Domains\Note\UI.lua
+Domains\Note\Dialogs.lua

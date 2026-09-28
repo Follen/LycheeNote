@@ -1,92 +1,112 @@
+--- 荔枝笔记生命周期
+-- 固定事件白名单：ADDON_LOADED、PLAYER_LOGIN、PLAYER_REGEN_DISABLED、GROUP_ROSTER_UPDATE。
+-- 初始化顺序显式声明；停用时立即取消订阅并清掉高亮，不卸载不可逆的 hook。
+
 local ADDON_NAME, ns = ...
+local LN = ns.LycheeNote
 
-ns.addonName = ADDON_NAME
-ns.events = ns.events or CreateFrame("Frame", "RememberNoobEventFrame")
-ns.modules = ns.modules or {}
+local events = CreateFrame("Frame", "LycheeNoteEvents")
+LN.events = events
 
-if not ns.SafeCall then
-  function ns.SafeCall(label, fn, ...)
-    if type(fn) ~= "function" then return true end
-    local ok, err = pcall(fn, ...)
-    if not ok then
-      print("|cffff3333[RememberNoob]|r " .. tostring(label) .. ": " .. tostring(err))
-      return false
+local initialized = false
+local partyWatchRegistered = false
+
+--- 显式初始化顺序：存储 → 界面 → 右键菜单 → 集合石高亮 → 队伍检查。
+local function InitializeDomains()
+  if initialized then return end
+  initialized = true
+  LN.SafeCall("Notes.Initialize", LN.Notes.Initialize)
+  LN.SafeCall("UI.Initialize", LN.UI.Initialize)
+  LN.SafeCall("Menus.Setup", LN.Menus.Setup)
+  LN.SafeCall("MeetingStone.Initialize", LN.MeetingStone.Initialize)
+end
+
+--- 只有启用状态下的功能才订阅 GROUP_ROSTER_UPDATE 并应用集合石高亮。
+local function SyncEnabledFeatures()
+  local enabled = LN.Config.IsEnabled()
+  if enabled and not partyWatchRegistered then
+    partyWatchRegistered = true
+    events:RegisterEvent("GROUP_ROSTER_UPDATE")
+    LN.SafeCall("Menus.Setup", LN.Menus.Setup)
+    LN.SafeCall("MeetingStone.Initialize", LN.MeetingStone.Initialize)
+  elseif not enabled and partyWatchRegistered then
+    partyWatchRegistered = false
+    events:UnregisterEvent("GROUP_ROSTER_UPDATE")
+    LN.SafeCall("MeetingStone.Refresh", LN.MeetingStone.Refresh)
+    LN.SafeCall("UI.RefreshIfOpen", LN.UI.RefreshIfOpen)
+  end
+end
+
+function LN.SetEnabled(enabled)
+  LN.Config.SetBool("enabled", enabled)
+  SyncEnabledFeatures()
+  LN.Log.Info(enabled and "已启用。" or "已停用：右键标记与集合石高亮已关闭。")
+end
+
+--- /note            打开 / 关闭主窗口
+--- /note on|off     启用 / 停用（右键与集合石高亮一并停止）
+--- /note add 理由   记录当前选中目标
+local function MarkTarget(reason)
+  if not UnitExists("target") or not UnitIsPlayer("target") then
+    LN.Log.Error("没有选中有效的玩家目标。")
+    return
+  end
+  local name = GetUnitName("target", false)
+  if LN.Trim(reason) == "" then
+    LN.Notes.Mark(name)
+  else
+    LN.Notes.Add(name, reason)
+  end
+end
+
+local function RegisterSlashCommands()
+  SLASH_LYCHEENOTE1 = "/note"
+  SlashCmdList["LYCHEENOTE"] = function(msg)
+    local command, rest = (msg or ""):match("^(%S+)%s*(.-)$")
+    command = command or ""
+    if command == "on" then
+      LN.SetEnabled(true)
+      return
     end
-    return true
-  end
-end
-
-if not ns.RegisterModule then
-  function ns.RegisterModule(name, module)
-    ns.modules[name] = module
-  end
-end
-
-local function Dispatch(event, ...)
-  for name, module in pairs(ns.modules) do
-    local handler = module and module[event]
-    if handler then
-      ns.SafeCall(name .. "." .. event, handler, module, ...)
+    if command == "off" then
+      LN.SetEnabled(false)
+      return
     end
+    if command == "add" then
+      MarkTarget(rest)
+      return
+    end
+    if LN.UI.Toggle then LN.UI.Toggle() end
   end
 end
 
-ns.events:SetScript("OnEvent", function(_, event, ...)
+events:SetScript("OnEvent", function(_, event, ...)
   if event == "ADDON_LOADED" then
-    local loadedName = ...
-    if loadedName ~= ADDON_NAME then return end
-    ns.events:UnregisterEvent("ADDON_LOADED")
+    if ... ~= ADDON_NAME then return end
+    events:UnregisterEvent("ADDON_LOADED")
+    LN.SafeCall("Config.Initialize", LN.Config.Initialize)
+    RegisterSlashCommands()
+    InitializeDomains()
+    SyncEnabledFeatures()
+    return
+  end
 
-    if ns.Config and ns.Config.Initialize then
-      ns.Config.Initialize()
-    end
-
-    Dispatch("OnInitialize")
-
-    SLASH_REMEMBERNOOB1 = "/noob"
-    SlashCmdList["REMEMBERNOOB"] = function(msg)
-      msg = (msg or ""):gsub("^%s+", ""):gsub("%s+$", "")
-      if msg == "debug" then
-        if ns.RememberNoobUI and ns.RememberNoobUI.ToggleDebugPanel then
-          ns.RememberNoobUI.ToggleDebugPanel()
-        end
-        return
-      end
-      if ns.RememberNoobUI and ns.RememberNoobUI.ShowManagementUI then
-        ns.RememberNoobUI.ShowManagementUI()
-      end
-    end
-
-    SLASH_RNADD1 = "/rnadd"
-    SlashCmdList["RNADD"] = function(msg)
-      if UnitExists("target") and UnitIsPlayer("target") then
-        local name = GetUnitName("target", false)
-        if msg and msg ~= "" then
-          if ns.RememberNoobNoob then
-            ns.RememberNoobNoob.AddNoobMark(name, msg)
-          end
-        else
-          if ns.RememberNoobNoob then
-            ns.RememberNoobNoob.MarkAsNoob(name)
-          end
-        end
-      else
-        print("|cffff0000RememberNoob: 没有选中有效的玩家目标|r")
-      end
-    end
-
-    ns.events:RegisterEvent("GROUP_ROSTER_UPDATE")
+  if event == "PLAYER_LOGIN" then
+    events:UnregisterEvent("PLAYER_LOGIN")
+    LN.SafeCall("Menus.Setup", LN.Menus.Setup)
     return
   end
 
   if event == "GROUP_ROSTER_UPDATE" then
-    if ns.RememberNoobEvents and ns.RememberNoobEvents.CheckPartyMembers then
-      ns.RememberNoobEvents.CheckPartyMembers()
-    end
+    if LN.Events.CheckParty then LN.Events.CheckParty() end
     return
   end
 
-  Dispatch(event, ...)
+  if event == "PLAYER_REGEN_DISABLED" then
+    LN.SafeCall("Layer.OnCombatLockdown", LN.Layer.OnCombatLockdown)
+  end
 end)
 
-ns.events:RegisterEvent("ADDON_LOADED")
+events:RegisterEvent("ADDON_LOADED")
+events:RegisterEvent("PLAYER_LOGIN")
+events:RegisterEvent("PLAYER_REGEN_DISABLED")
