@@ -15,6 +15,8 @@ local function esc(s)
 end
 local function put(k, v) out[#out + 1] = tostring(k) .. "=" .. esc(v) end
 local function oneLine(s) return (tostring(s or ""):gsub("[\r\n]+", " | ")) end
+-- 实机锚定算出的尺寸是浮点（407.999 这类），一律用容差比较，不能 ==。
+local function near(value, target) return math.abs((value or 0) - target) < 1.5 end
 
 local LN = _G.LycheeNote
 put("haveLN", LN ~= nil)
@@ -42,7 +44,7 @@ local base = Layer and Layer.GetBase and Layer.GetBase()
 put("haveWindow", base ~= nil)
 
 -- 侧栏导航钮引用，页面切换段用它们核对红条随选区翻转。
-local navFrames = {}
+local actionButtons = {}
 
 if base then
   put("win.size", string.format("%dx%d", base:GetWidth() or -1, base:GetHeight() or -1))
@@ -131,53 +133,43 @@ if base then
   put("texCount", #textures)
   for i = 1, math.min(#textures, 6) do put("x" .. i, textures[i]) end
 
-  -- 签名控件断言（替代旧标签栏探针）：侧栏导航 + 底栏联系入口 + 无暴雪滚动条箭头。
-  -- 实机锚定算出的尺寸是浮点（407.999 这类），一律用 near() 容差，不能 ==。
-  local function near(value, target) return math.abs((value or 0) - target) < 1.5 end
-
-  -- 侧栏 172×408 是唯一 172 宽的直接子框体；头部/底栏都是 760×56，按贴底区分。
-  local sidebar, footer
+  -- 签名控件断言：头部动作按钮 + 底栏联系入口 + 无暴雪滚动条箭头。
+  -- 头部/底栏都是 760×56，按贴顶/贴底区分。
+  local header, footer
   for _, child in ipairs({ base:GetChildren() }) do
     if child.GetObjectType and child:GetObjectType() == "Frame" then
       local w, h = child:GetWidth() or 0, child:GetHeight() or 0
-      if near(w, 172) and near(h, 408) then sidebar = child end
       if near(w, 760) and near(h, 56) then
+        if math.abs((child:GetTop() or 0) - (base:GetTop() or 0)) < 2 then header = child end
         if math.abs((child:GetBottom() or 0) - (base:GetBottom() or 0)) < 2 then footer = child end
       end
     end
   end
 
-  if sidebar then
-    put("sidebar", string.format("%.0fx%.0f", sidebar:GetWidth(), sidebar:GetHeight()))
-    local navs = {}
-    for _, child in ipairs({ sidebar:GetChildren() }) do
-      if child.GetObjectType and child:GetObjectType() == "Button" then navs[#navs + 1] = child end
+  if header then
+    put("header", string.format("%.0fx%.0f", header:GetWidth(), header:GetHeight()))
+    local acts = {}
+    for _, child in ipairs({ header:GetChildren() }) do
+      if child.GetObjectType and child:GetObjectType() == "Button"
+        and near(child:GetWidth() or 0, 32) and near(child:GetHeight() or 0, 32) then
+        acts[#acts + 1] = child
+      end
     end
-    put("navButtons", #navs)
-    for index, button in ipairs(navs) do
-      put("nav" .. index, string.format("%.0fx%.0f", button:GetWidth() or -1, button:GetHeight() or -1))
-      local barShown, barW, barH, labelText
+    put("header.actions", #acts)
+    for index, button in ipairs(acts) do
+      local icon, shown = "?", "?"
       for _, region in ipairs({ button:GetRegions() }) do
-        local kind = region.GetObjectType and region:GetObjectType() or "?"
-        if kind == "Texture" then
-          barShown = region:IsShown()
-          barW, barH = region:GetWidth() or -1, region:GetHeight() or -1
-        elseif kind == "FontString" then
-          labelText = region:GetText()
+        if region.GetObjectType and region:GetObjectType() == "Texture" then
+          local okg, tex = pcall(region.GetTexture, region)
+          icon = okg and tostring(tex) or "ERR"
+          shown = tostring(region:IsShown())
         end
       end
-      put("nav" .. index .. ".bar", string.format("shown=%s %.0fx%.0f",
-        tostring(barShown), barW or -1, barH or -1))
-      put("nav" .. index .. ".label", labelText or "?")
-      -- 期望文本按 UTF-8 字节转义写死，避免源码编码干扰比较。
-      local expected = (index == 1)
-        and "\232\174\176\229\189\149\229\144\141\229\141\149"  -- 记录名单
-        or "\232\174\190\231\189\174"                           -- 设置
-      put("nav" .. index .. ".label.ok", tostring(labelText == expected))
-      navFrames[index] = button
+      put("action" .. index, string.format("shown=%s icon=%s", shown, icon))
+      actionButtons[index] = button
     end
   else
-    put("sidebar", "missing")
+    put("header", "missing")
   end
 
   if footer then
@@ -252,21 +244,16 @@ if base then
   put("strayArrows", strayArrows)
 end
 
--- 页面切换 + 侧栏红条随选区翻转
+-- 页面切换 + 头部动作按钮随页互换（SetShown 即时生效，无动画中间态）
 if LN.UI and LN.UI.SelectPage then
-  local function barShown(button)
+  local function shownState(button)
     if not button then return "?" end
-    for _, region in ipairs({ button:GetRegions() }) do
-      if region.GetObjectType and region:GetObjectType() == "Texture" then
-        return tostring(region:IsShown())
-      end
-    end
-    return "?"
+    return tostring(button:IsShown())
   end
   local okp, errp = pcall(LN.UI.SelectPage, 2)
   put("page2", tostring(okp) .. " " .. oneLine(errp))
-  put("page2.nav1bar", barShown(navFrames[1]))
-  put("page2.nav2bar", barShown(navFrames[2]))
+  put("page2.action1", shownState(actionButtons[1]))
+  put("page2.action2", shownState(actionButtons[2]))
 
   -- 设置页结构：动态效果行、数据小节头、3 个 48×28 按钮、滚动视口数、文本区字号
   if base then
@@ -304,8 +291,34 @@ if LN.UI and LN.UI.SelectPage then
   end
 
   pcall(LN.UI.SelectPage, 1)
-  put("page1.nav1bar", barShown(navFrames[1]))
-  put("page1.nav2bar", barShown(navFrames[2]))
+  put("page1.action1", shownState(actionButtons[1]))
+  put("page1.action2", shownState(actionButtons[2]))
+  -- 名单页几何：贴片应占满内容区 728，无侧栏
+  if base then
+    local pages = 0
+    local function countPages(node)
+      for _, child in ipairs({ node:GetChildren() }) do
+        local w, h = child:GetWidth() or 0, child:GetHeight() or 0
+        if near(w, 728) and near(h, 408) then pages = pages + 1 end
+        countPages(child)
+      end
+    end
+    countPages(base)
+    put("page1.pages", pages)
+    put("page1.headerText", (function()
+      for _, region in ipairs({ base:GetChildren() }) do
+        if region.GetObjectType and region:GetObjectType() == "Frame" then
+          for _, fs in ipairs({ region:GetRegions() }) do
+            if fs.GetObjectType and fs:GetObjectType() == "FontString" then
+              local okt, t = pcall(fs.GetText, fs)
+              if okt and t and t ~= "" then return oneLine(t) end
+            end
+          end
+        end
+      end
+      return "?"
+    end)())
+  end
 end
 
 -- 弹窗

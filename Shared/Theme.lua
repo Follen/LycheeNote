@@ -13,6 +13,8 @@ LN.Theme = Theme
 Theme.Media = {
   logo = "Interface\\AddOns\\LycheeNote\\Media\\lychee-logo.tga",
   corner = "Interface\\AddOns\\LycheeNote\\Media\\rounded-corner.tga",
+  settings = "Interface\\AddOns\\LycheeNote\\Media\\settings.tga",
+  back = "Interface\\AddOns\\LycheeNote\\Media\\back-search.tga",
 }
 
 Theme.BrandColor = "|cffd53c49"
@@ -67,9 +69,10 @@ Theme.FontSizes = {
 }
 
 --- 尺寸与 Lychee 启动器一一对应：头/底 56、行高 46 行距 6、底部图标 28 命中 / 18 图形。
---- 侧栏是本插件独有的导航区，宽度取 172，条目沿用 Lychee 的「当前项 = 2×22 红条」语言。
+--- 设置与返回共用头部动作槽位（荔枝天赋样式）：32 命中 / 20 图形。
+--- 名单贴片占满内容区：窗口 760 − 左右内距 16×2 = 728。
 Theme.Metrics = {
-  uiScale = 1.15,
+  uiScale = 0.8,
 
   windowWidth = 760,
   windowHeight = 520,
@@ -82,17 +85,15 @@ Theme.Metrics = {
   brandIconSize = 42,
   brandLabelGap = 10,
 
-  sidebarWidth = 172,
-  navHeight = 32,
-  navGap = 4,
-  navInset = 16,
+  headerActionHit = 32,
+  headerActionIcon = 20,
 
   footerIconHit = 28,
   footerIconSize = 18,
   footerIconStride = 36,
 
   listInset = 0,
-  resultTileWidth = 556,
+  resultTileWidth = 728,
   rowHeight = 46,
   rowGap = 6,
   selectionWidth = 2,

@@ -69,5 +69,6 @@ function LN.Log.Write(color, message, ...)
 end
 
 function LN.Log.Info(message, ...) LN.Log.Write(LN.brandColor, message, ...) end
-function LN.Log.Success(message, ...) LN.Log.Write("|cff4fb074", message, ...) end
+--- 前缀一律荔枝红（与 Lychee 启动器同源）；成功与普通消息只在内容上区分，不再染绿。
+function LN.Log.Success(message, ...) LN.Log.Info(message, ...) end
 function LN.Log.Error(message, ...) LN.Log.Write("|cffff5560", message, ...) end

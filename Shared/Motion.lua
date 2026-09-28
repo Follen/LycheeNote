@@ -21,6 +21,7 @@ local slide     -- {frame, anchor, phase, leaving, done}
 local brand     -- {region, size, anchor, elapsed}
 local fades = {} -- {region, from, to, elapsed, duration, done, hideAtEnd}
 local moves = {} -- {region, parent, from, to, elapsed} 开关滑块的纯水平位移
+local applyAnchors -- 前置声明：捕获 / 还原锚点组
 local tick      -- 前置声明：startDriver 要挂在 OnUpdate 上
 
 local function reduced()
@@ -55,20 +56,32 @@ end
 local function settle(job)
   local frame = job.frame
   if frame then
-    local a = job.anchor
-    if a and a[1] then
-      frame:ClearAllPoints()
-      frame:SetPoint(a[1], a[2], a[3], a[4], a[5])
+    if job.anchors then
+      applyAnchors(frame, job.anchors, 0, 0)
     end
     frame:SetAlpha(1)
   end
 end
 
---- 取第一条锚点；拿不到锚点的框体不能参与位移动画。
-local function captureAnchor(frame)
-  local p, relative, rp, x, y = frame:GetPoint(1)
-  if not p then return nil end
-  return { p, relative, rp, x, y }
+--- 捕获全部锚点。双锚框体（页面、滚动视口）必须整组还原——
+--- 只还 GetPoint(1) 会拆掉第二条锚，框体尺寸归零、页面全黑（实机事故）。
+local function captureAnchors(frame)
+  local points = {}
+  local count = frame.GetNumPoints and frame:GetNumPoints() or 0
+  for index = 1, count do
+    local p, relative, rp, x, y = frame:GetPoint(index)
+    points[#points + 1] = { p, relative, rp, x, y }
+  end
+  if #points == 0 then return nil end
+  return points
+end
+
+applyAnchors = function(frame, points, dx, dy)
+  frame:ClearAllPoints()
+  for index = 1, #points do
+    local a = points[index]
+    frame:SetPoint(a[1], a[2], a[3], a[4] + (dx or 0), a[5] + (dy or 0))
+  end
 end
 
 --- 窗口级进出：进场上浮 16px，退场下沉，缓动 q*(2-q)，alpha 在前 0.10s 内到位。
@@ -87,14 +100,14 @@ function Motion:Presence(frame, shown, done)
     if done then done() end
     return
   end
-  local anchor = captureAnchor(frame)
+  local anchor = captureAnchors(frame)
   if not anchor then
     if done then done() end
     return
   end
   presence = {
     frame = frame,
-    anchor = anchor,
+    anchors = anchor,
     phase = shown and 0 or 1,
     direction = shown and 1 or -1,
     done = done,
@@ -113,14 +126,14 @@ function Motion:Slide(frame, direction, leaving, done)
     if done then done() end
     return
   end
-  local anchor = captureAnchor(frame)
+  local anchor = captureAnchors(frame)
   if not anchor then
     if done then done() end
     return
   end
   slide = {
     frame = frame,
-    anchor = anchor,
+    anchors = anchor,
     phase = 0,
     direction = direction or 1,
     leaving = leaving == true,
@@ -202,9 +215,7 @@ function Motion:StopBrand()
   if not job then return end
   if blocked() then return end
   job.region:SetSize(job.size, job.size)
-  local a = job.anchor
-  job.region:ClearAllPoints()
-  job.region:SetPoint(a[1], a[2], a[3], a[4], a[5])
+  applyAnchors(job.region, job.anchors, 0, 0)
 end
 
 --- 品牌标志的 squash / lift / settle 弹跳，窗口打开时播放一次。
@@ -212,9 +223,9 @@ function Motion:Brand(region, size)
   if brand and brand.region == region then return end
   self:StopBrand()
   if blocked() or not region or region:IsShown() ~= true then return end
-  local anchor = captureAnchor(region)
+  local anchor = captureAnchors(region)
   if not anchor then return end
-  brand = { region = region, size = size or region:GetWidth(), anchor = anchor, elapsed = 0 }
+  brand = { region = region, size = size or region:GetWidth(), anchors = anchor, elapsed = 0 }
   startDriver()
 end
 
@@ -230,9 +241,7 @@ function tick(_, elapsed)
       local eased = q * (2 - q)
       local alpha = math.min(1, q * DURATION_PRESENCE / 0.10)
       alpha = alpha * (2 - alpha)
-      local a = job.anchor
-      job.frame:ClearAllPoints()
-      job.frame:SetPoint(a[1], a[2], a[3], a[4] + 16 * (1 - eased), a[5])
+      applyAnchors(job.frame, job.anchors, 0, 16 * (1 - eased))
       job.frame:SetAlpha(alpha)
       if (job.direction == 1 and q == 1) or (job.direction == -1 and q == 0) then
         settle(job)
@@ -253,9 +262,7 @@ function tick(_, elapsed)
       local q = job.phase
       local eased = 1 - (1 - q) ^ 3
       local distance = job.direction * (job.leaving and -8 or 12)
-      local a = job.anchor
-      job.frame:ClearAllPoints()
-      job.frame:SetPoint(a[1], a[2], a[3], a[4] + distance * (job.leaving and eased or 1 - eased), a[5])
+      applyAnchors(job.frame, job.anchors, distance * (job.leaving and eased or 1 - eased), 0)
       job.frame:SetAlpha(job.leaving and 1 - eased or 0.4 + 0.6 * eased)
       if q == 1 then
         settle(job)
@@ -281,7 +288,7 @@ function tick(_, elapsed)
             local scale = brandEase(t, pose[5], pose[6], pose[7], pose[8])
             local move = brandEase(t, pose[9], pose[10], pose[11], pose[12])
             local x2, y2 = sx + (pose[2] - sx) * scale, sy + (pose[3] - sy) * scale
-            local a = job.anchor
+            local a = job.anchors[1]
             job.region:SetSize(job.size * x2, job.size * y2)
             job.region:ClearAllPoints()
             job.region:SetPoint(a[1], a[2], a[3], a[4],

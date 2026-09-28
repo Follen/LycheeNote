@@ -461,7 +461,7 @@ local function CollectTree(root)
   return counts, texts, textures
 end
 
---- 几何与 Lychee 启动器同源：头/底 56、行高 46 行距 6、底部图标 28/18。
+--- 几何与 Lychee 家族同源：头/底 56、行高 46 行距 6、底部图标 28/18、贴片 728。
 Check("主窗口几何与 Lychee 对齐", function()
   local M = ns.LycheeNote.Theme.Metrics
   assert(M.headerHeight == 56 and M.footerHeight == 56, "头/底应为 56")
@@ -469,7 +469,9 @@ Check("主窗口几何与 Lychee 对齐", function()
   assert(M.switchWidth == 32 and M.switchHeight == 18, "开关应为 32×18")
   assert(M.footerIconHit == 28 and M.footerIconSize == 18, "底部图标应为 28 命中 / 18 图形")
   assert(M.footerIconStride == 36, "底部图标间距应为 36（28 命中 + 8 空隙）")
-  assert(M.selectionWidth == 2 and M.selectionHeight == 22, "当前项红条应为 2×22")
+  assert(M.headerActionHit == 32 and M.headerActionIcon == 20, "头部动作应为 32 命中 / 20 图形")
+  assert(M.resultTileWidth == M.windowWidth - M.contentPadding * 2,
+    "名单贴片应占满内容区 728，实际 " .. tostring(M.resultTileWidth))
 end)
 
 Check("主窗口各区域都有非零尺寸", function()
@@ -486,75 +488,86 @@ Check("主窗口各区域都有非零尺寸", function()
 
   -- 头部与底栏必须真的算出了宽度（黑屏事故的判据）。
   -- 两者高度都是 56，按锚点区分：贴顶的是头部，贴底的是底栏。
-  local header, footer, sidebar
+  local header, footer
   for _, child in ipairs({ base:GetChildren() }) do
     if child:GetObjectType() == "Frame" then
       local points = {}
       for _, p in ipairs(child.__points) do points[p[1]] = true end
       if points.TOPLEFT and points.TOPRIGHT then header = child end
       if points.BOTTOMLEFT and points.BOTTOMRIGHT and not points.TOPLEFT then footer = child end
-      if points.TOPLEFT and points.BOTTOMLEFT and not points.TOPRIGHT then sidebar = child end
     end
   end
   assert(header, "找不到贴顶的头部（锚点可能丢失）")
   assert(header:GetWidth() == M.windowWidth, "头部宽应为 " .. M.windowWidth .. "，实际 " .. header:GetWidth())
   assert(footer, "找不到贴底的底栏")
   assert(footer:GetWidth() == M.windowWidth, "底栏宽应为 " .. M.windowWidth .. "，实际 " .. footer:GetWidth())
-  assert(sidebar, "找不到侧栏（TOPLEFT + BOTTOMLEFT 双锚）")
-  assert(sidebar:GetWidth() == M.sidebarWidth, "侧栏宽应为 " .. M.sidebarWidth .. "，实际 " .. sidebar:GetWidth())
-  assert(sidebar:GetHeight() > 300, "侧栏高度异常：" .. sidebar:GetHeight())
+
+  -- 两个页面都是显式尺寸 + 单锚，尺寸不依赖锚点推断。
+  local pageWidth = M.windowWidth - M.contentPadding * 2
+  local pageHeight = M.windowHeight - M.headerHeight - M.footerHeight
+  local pages = {}
+  local function findPages(node)
+    for _, child in ipairs({ node:GetChildren() }) do
+      if child:GetWidth() == pageWidth and child:GetHeight() == pageHeight then
+        pages[#pages + 1] = child
+      end
+      findPages(child)
+    end
+  end
+  findPages(base)
+  assert(#pages >= 2, "应有名单与设置两个整幅页面，实际 " .. #pages)
 end)
 
---- 侧栏沿用 Lychee 的「当前项」语言：2 × 22 荔枝红短条 + 文字转 text。
-Check("侧栏：当前项红条 + 文字提亮", function()
+--- 头部动作：默认名单页显示设置按钮；进设置页换返回按钮；ESC 先回名单。
+Check("头部：设置/返回按钮随页互换 + ESC 返回", function()
   local base = ns.LycheeNote.Layer.GetBase()
   local M = ns.LycheeNote.Theme.Metrics
-  local sidebar
+  local header
   for _, child in ipairs({ base:GetChildren() }) do
     if child:GetObjectType() == "Frame" then
       local points = {}
       for _, p in ipairs(child.__points) do points[p[1]] = true end
-      if points.TOPLEFT and points.BOTTOMLEFT and not points.TOPRIGHT then sidebar = child end
+      if points.TOPLEFT and points.TOPRIGHT then header = child end
     end
   end
-  assert(sidebar, "找不到侧栏")
+  assert(header, "找不到头部")
 
-  local navs = {}
-  for _, child in ipairs({ sidebar:GetChildren() }) do
-    if child:GetObjectType() == "Button" then navs[#navs + 1] = child end
-  end
-  assert(#navs == 2, "侧栏应有 2 项，实际 " .. #navs)
-
-  for _, nav in ipairs(navs) do
-    assert(nav:GetWidth() > 0 and nav:GetHeight() > 0, "导航项尺寸为 0")
-    -- 每一项都带一条预备好的红条贴图，只在当前项显示
-    local bar
-    for _, region in ipairs({ nav:GetRegions() }) do
-      if region:GetObjectType() == "Texture" and region.__color then
-        local c = region.__color
-        if c[1] > 0.7 and c[2] < 0.4 then bar = region end
+  local actions = {}
+  for _, child in ipairs({ header:GetChildren() }) do
+    if child:GetObjectType() == "Button" and child:GetWidth() == M.headerActionHit
+      and child:GetHeight() == M.headerActionHit then
+      -- 动作按钮带 20 方形图标贴图；关闭按钮是两条 14 宽笔画，按图标区分
+      for _, region in ipairs({ child:GetRegions() }) do
+        if region:GetObjectType() == "Texture" and region:GetTexture()
+          and math.abs((region:GetWidth() or 0) - M.headerActionIcon) < 0.5 then
+          actions[#actions + 1] = child
+          break
+        end
       end
     end
-    assert(bar, "导航项缺少红色竖条贴图")
+  end
+  assert(#actions == 2, "头部应有设置与返回两个动作按钮，实际 " .. #actions)
+  for _, button in ipairs(actions) do
+    local icons = 0
+    for _, region in ipairs({ button:GetRegions() }) do
+      if region:GetObjectType() == "Texture" and region:GetTexture() then icons = icons + 1 end
+    end
+    assert(icons >= 1, "动作按钮缺少图标贴图")
   end
 
-  -- 第 1 页时第 1 项亮条、第 2 项不亮；切页后互换。
-  -- 红条带 0.10s 淡入淡出：断言前先落定全部动画，只认终态。
   local Motion = ns.LycheeNote.Motion
   assert(Motion and Motion.FinishAll, "Motion 模块缺失或缺少 FinishAll")
-  local function barOf(nav)
-    for _, region in ipairs({ nav:GetRegions() }) do
-      if region:GetObjectType() == "Texture" and region:IsShown() then return region end
-    end
-  end
   ns.LycheeNote.UI.SelectPage(1)
   Motion.FinishAll()
-  assert(barOf(navs[1]), "第 1 页时第 1 项应显示红条")
-  assert(not barOf(navs[2]), "第 1 页时第 2 项不应显示红条")
+  assert(actions[1]:IsShown() ~= actions[2]:IsShown(), "名单页应恰好显示一个动作按钮")
   ns.LycheeNote.UI.SelectPage(2)
   Motion.FinishAll()
-  assert(barOf(navs[2]), "第 2 页时第 2 项应显示红条")
-  assert(not barOf(navs[1]), "第 2 页时第 1 项不应显示红条")
+  assert(actions[1]:IsShown() ~= actions[2]:IsShown(), "设置页动作按钮应互换显隐")
+
+  -- ESC 在设置页先返回名单，不关窗
+  assert(ns.LycheeNote.Layer.OnEscape() == true, "设置页按 ESC 应被消费")
+  Motion.FinishAll()
+  assert(ns.LycheeNote.Layer.GetBase() ~= nil, "ESC 返回后主窗口应仍打开")
   ns.LycheeNote.UI.SelectPage(1)
   Motion.FinishAll()
 end)
@@ -661,17 +674,25 @@ Check("联系弹窗锚在入口栏上方", function()
   view:Close()
 end)
 
---- 设置页 = 三行开关（含动态效果）+ 数据段（小节头 / 28 高按钮 / 滚动文本区）。
-Check("设置页结构：三行开关与数据段", function()
+--- 设置页 = 三行开关（含动态效果）+ 可折叠「导入导出」行（展开 = 文本区 + 按钮）。
+Check("设置页结构：三行开关与折叠数据段", function()
   local base = ns.LycheeNote.Layer.GetBase()
+  local Motion = ns.LycheeNote.Motion
   ns.LycheeNote.UI.SelectPage(2)
-  ns.LycheeNote.Motion.FinishAll()
+  Motion.FinishAll()
 
-  local buttons, texts, scrollFrames = {}, {}, 0
+  local buttons, texts, scrollFrames, dataRow = {}, {}, 0, nil
   local function walk(node)
     for _, child in ipairs({ node:GetChildren() }) do
       local kind = child:GetObjectType()
-      if kind == "Button" then buttons[#buttons + 1] = child end
+      if kind == "Button" then
+        buttons[#buttons + 1] = child
+        -- 折叠行：整幅宽、行高、可点击
+        if child:GetWidth() == ns.LycheeNote.Theme.Metrics.resultTileWidth
+          and child:GetHeight() == ns.LycheeNote.Theme.Metrics.rowHeight then
+          dataRow = child
+        end
+      end
       if kind == "ScrollFrame" then scrollFrames = scrollFrames + 1 end
       walk(child)
     end
@@ -685,16 +706,36 @@ Check("设置页结构：三行开关与数据段", function()
 
   local joined = table.concat(texts, "\n")
   assert(joined:find("动态效果", 1, true), "缺少「动态效果」开关行")
-  assert(joined:find("数据", 1, true), "缺少数据段小节头")
+  assert(dataRow, "缺少可折叠导入导出行")
+  assert(joined:find("导入导出", 1, true), "折叠行标题应为「导入导出」")
+
+  -- 展开：点折叠行 → 下拉出文本区与按钮
+  local click = dataRow:GetScript("OnClick")
+  assert(click, "折叠行缺少 OnClick")
+  click(dataRow)
+  Motion.FinishAll()
+
   local actionButtons = 0
   for _, button in ipairs(buttons) do
     if button:GetWidth() == 48 and button:GetHeight() == 28 then actionButtons = actionButtons + 1 end
   end
-  assert(actionButtons == 3, "数据段应有 3 个 48×28 文字按钮，实际 " .. actionButtons)
+  assert(actionButtons == 3, "展开后应有 3 个 48×28 文字按钮，实际 " .. actionButtons)
   -- 列表页 + 设置页各一个滚动视口；文本区内嵌第三个（TextArea 的滚动壳）。
   assert(scrollFrames >= 3, "应有 ≥3 个裸 ScrollFrame（两页视口 + 文本区），实际 " .. scrollFrames)
+
+  -- 收起：按钮面板隐藏
+  click(dataRow)
+  Motion.FinishAll()
+  local visibleButtons = 0
+  for _, button in ipairs(buttons) do
+    if button:IsShown() and button:GetWidth() == 48 and button:GetHeight() == 28 then
+      visibleButtons = visibleButtons + 1
+    end
+  end
+  assert(visibleButtons == 0, "收起后数据按钮不应显示，实际 " .. visibleButtons)
+
   ns.LycheeNote.UI.SelectPage(1)
-  ns.LycheeNote.Motion.FinishAll()
+  Motion.FinishAll()
 end)
 
 --- 行池上限与名单长度无关。

@@ -208,7 +208,8 @@ function Notes.Remove(playerName, server)
   local record, key = Notes.Find(playerName, server)
   if not record or not key then return false end
   LN.db.records[key] = nil
-  LN.Log.Success("已移除 " .. (record.name or playerName) .. " 的记录。")
+  LN.Log.Success("已移除 " .. (record.name or playerName) .. "-"
+    .. (record.server or server or GetRealmName()) .. " 的记录。")
   if LN.UI.RefreshIfOpen then LN.UI.RefreshIfOpen() end
   return true
 end

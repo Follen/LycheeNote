@@ -85,45 +85,6 @@ function Components.CreateNavigationButton(parent, options)
   return component
 end
 
---- 侧栏导航项，沿用 Lychee 的「当前项」语言：透明底、无分隔线，
---- 常态 textMuted，当前项文字转 text 并在左侧亮起 2 × 22 的荔枝红短条。
-function Components.CreateNavItem(parent, text, onClick)
-  local metrics = Theme.Metrics
-  local frame = CreateFrame("Button", nil, parent)
-  frame:SetSize(metrics.sidebarWidth - metrics.navInset * 2, metrics.navHeight)
-
-  local bar = Theme:CreateSelectionBar(frame)
-  Theme:Anchor(bar, "LEFT", frame, "LEFT", -metrics.navInset + 4, 0)
-
-  local label = Components.CreateText(frame, text, "body", "textMuted", "LEFT")
-  Theme:Anchor(label, "LEFT", frame, "LEFT", 16, 0)
-  Theme:Anchor(label, "RIGHT", frame, "RIGHT", -8, 0)
-
-  local component = { frame = frame, label = label, bar = bar }
-  function component:Refresh()
-    if self.selected then
-      Theme:SetTextColor(self.label, "text")
-      Theme:SetColorTexture(self.bar, "accent")
-      if Motion then Motion:Fade(self.bar, 1) else setShown(self.bar, true) end
-    else
-      Theme:SetTextColor(self.label, frame:IsMouseOver() and "accentHover" or "textMuted")
-      if Motion then Motion:Fade(self.bar, 0) else setShown(self.bar, false) end
-    end
-  end
-  function component:SetSelected(selected)
-    selected = selected == true
-    if self.selected == selected then return false end
-    self.selected = selected
-    self:Refresh()
-    return true
-  end
-  frame:SetScript("OnEnter", function() component:Refresh() end)
-  frame:SetScript("OnLeave", function() component:Refresh() end)
-  if onClick then frame:SetScript("OnClick", onClick) end
-  component:Refresh()
-  return component
-end
-
 --- 底部联系入口，与 Lychee 同形：28 命中区 / 18 图形 / 间距 8 / 右边距 28。
 --- entries: { { icon, title, url } 或 { icon, title, code } }；code 走扫码图，url 走可复制输入框。
 function Components.CreateSocialBar(parent, entries)
@@ -357,8 +318,12 @@ function Components.CreateToggle(parent, onChanged)
     self.track:SetColor(enabled and "switchOff" or "disabled")
   end
 
+  -- 点击立即翻状态并播放滑块动画；onChanged 只负责业务落库，不负责视觉。
   frame:SetScript("OnClick", function()
-    if component.enabled ~= false and onChanged then onChanged(not component.checked) end
+    if component.enabled == false then return end
+    local next = not component.checked
+    component:SetChecked(next)
+    if onChanged then onChanged(next) end
   end)
 
   component.checked = false
@@ -455,10 +420,10 @@ function Components.CreateTextArea(parent, options)
   return component
 end
 
---- 关闭按钮：两条旋转的短横线，常态暖白，悬停荔枝红。
+--- 关闭按钮：两条旋转的短横线，与头部动作按钮同尺寸（32 命中），常态暖白，悬停荔枝红。
 function Components.CreateCloseButton(parent, onClick)
   local frame = CreateFrame("Button", nil, parent)
-  frame:SetSize(24, 24)
+  frame:SetSize(Theme.Metrics.headerActionHit, Theme.Metrics.headerActionHit)
 
   local hover = frame:CreateTexture(nil, "BACKGROUND")
   hover:SetAllPoints(frame)
@@ -468,7 +433,7 @@ function Components.CreateCloseButton(parent, onClick)
   local strokes = {}
   for index = 1, 2 do
     local stroke = frame:CreateTexture(nil, "ARTWORK")
-    stroke:SetSize(11, 1.5)
+    stroke:SetSize(14, 1.6)
     Theme:Anchor(stroke, "CENTER", frame, "CENTER", 0, 0)
     stroke:SetRotation(index == 1 and math.rad(45) or math.rad(-45))
     strokes[index] = stroke

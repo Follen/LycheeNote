@@ -20,12 +20,18 @@ end
 local baseFrame      -- 常规窗口
 local modalFrame     -- 模态弹窗
 local escapeFrame    -- 唯一的 ESC 接收框
+local escapeBack     -- 「先返回上一页」钩子（设置页 → 名单），返回 true 表示已消费
 local listeners = {} -- 需要在战斗中隐藏的窗口集合
 
 --- 自有浮层（动作菜单）也算一个 ESC 层级，必须先于窗口关闭。
 local function actionMenuIsOpen()
   local frame = _G.LycheeNoteActionMenu
   return frame ~= nil and frame:IsShown() == true
+end
+
+--- 页面注册 ESC 返回：动作菜单与模态都不在时，先退页再退窗。
+function Layer.SetEscapeBack(fn)
+  escapeBack = fn
 end
 
 function Layer.RegisterCombatHider(frame)
@@ -36,7 +42,7 @@ function Layer.UnregisterCombatHider(frame)
   if frame then listeners[frame] = nil end
 end
 
---- ESC：动作菜单 → 模态弹窗 → 主窗口 → 都不存在时交还给游戏。
+--- ESC：动作菜单 → 模态弹窗 → 页面返回 → 主窗口 → 都不存在时交还给游戏。
 function Layer.OnEscape()
   if actionMenuIsOpen() then
     Components.HideActionMenu()
@@ -44,6 +50,9 @@ function Layer.OnEscape()
   end
   if modalFrame then
     Layer.HideModal(modalFrame)
+    return true
+  end
+  if baseFrame and escapeBack and escapeBack() then
     return true
   end
   if baseFrame then

@@ -21,17 +21,16 @@ local EXPORT_PREFIX = "LN-"
 local MAX_ROWS = 12
 local ROW_STRIDE = metrics.rowHeight + metrics.rowGap
 local HEADER_ROW_HEIGHT = 24
-local HEADER_ROW_GAP = 6
+local HEADER_ROW_GAP = 10
+local HEADER_ROW_TOP = 4
 
-local NAV_NAMES = { "记录名单", "设置" }
-
---- 列偏移合计 556（去掉序号列后由内容区宽度决定），末列吃满剩余宽度。
+--- 列偏移合计 resultTileWidth，末列吃满剩余宽度。
 local COLUMNS = {
   { key = "name", title = "玩家", x = 0, width = 112, role = "body" },
   { key = "server", title = "服务器", x = 112, width = 104, role = "meta" },
   { key = "classSpec", title = "职业专精", x = 216, width = 112, role = "meta" },
   { key = "timestamp", title = "加入时间", x = 328, width = 84, role = "meta" },
-  { key = "reason", title = "理由", x = 412, width = 144, role = "meta" },
+  { key = "reason", title = "理由", x = 412, width = 316, role = "meta" },
 }
 
 --- 底部联系入口，与 Lychee 中文版一致：作者微信 + GitHub。
@@ -42,7 +41,7 @@ local SOCIAL = {
 
 local window
 local headerLogo
-local navItems = {}
+local headerActions
 local pages = {}
 local rowPool = {}
 local listState
@@ -139,7 +138,7 @@ function UI.RefreshList()
   local content = listState.view.content
   local width = metrics.resultTileWidth
 
-  Theme:Anchor(listState.headerRow, "TOPLEFT", content, "TOPLEFT", 0, 0)
+  Theme:Anchor(listState.headerRow, "TOPLEFT", content, "TOPLEFT", 0, -HEADER_ROW_TOP)
 
   local viewport = listState.view.frame
   local available = math.max(1,
@@ -226,13 +225,16 @@ local function CreateToggleRow(parent, item, index)
   return row
 end
 
---- 数据段沿用荔枝的天赋方案：meta 灰字小节头、28 高文字按钮、
---- field 质感的滚动文本区、一行状态文字。不再是一排悬空的小按钮。
+--- 数据段是一行可折叠的「导入导出」（与开关行同款标题，右侧 ">" 箭头），
+--- 展开后下拉出文本区，按钮在文本区下方——荔枝天赋设置页的折叠行方案。
 local DATA_ACTIONS = {
   { text = "导出" },
   { text = "导入" },
   { text = "全选" },
 }
+
+local ROW_TOP_PAD = 8
+local DATA_ROW_STRIDE = metrics.rowHeight + metrics.rowGap
 
 local function CreateSettingsPage(parent)
   local scroll = Components.CreateScrollView(parent)
@@ -241,24 +243,41 @@ local function CreateSettingsPage(parent)
 
   local rows = {}
   for index, item in ipairs(SETTINGS) do
-    rows[index] = CreateToggleRow(content, item, index)
+    local row = CreateToggleRow(content, item, index)
+    Theme:Anchor(row, "TOPLEFT", content, "TOPLEFT", 0, -(ROW_TOP_PAD + (index - 1) * ROW_STRIDE))
+    rows[index] = row
   end
 
-  local dataTop = #SETTINGS * ROW_STRIDE + 24
+  local dataTop = ROW_TOP_PAD + #SETTINGS * ROW_STRIDE + 28
 
-  local sectionHeader = Components.CreateText(content, "数据", "meta", "textDim", "LEFT")
-  Theme:Anchor(sectionHeader, "TOPLEFT", content, "TOPLEFT", 0, -dataTop)
+  local expanded = false
+  local dataRow = CreateFrame("Button", nil, content)
+  dataRow:SetSize(metrics.resultTileWidth, metrics.rowHeight)
+  Theme:Anchor(dataRow, "TOPLEFT", content, "TOPLEFT", 0, -dataTop)
 
-  local actions = CreateFrame("Frame", nil, content)
-  actions:SetSize(metrics.resultTileWidth, 28)
-  Theme:Anchor(actions, "TOPLEFT", content, "TOPLEFT", 0, -(dataTop + 24))
+  local dataName = Components.CreateText(dataRow, "导入导出", "body", "text", "LEFT")
+  Theme:Anchor(dataName, "TOPLEFT", dataRow, "TOPLEFT", 0, -7)
+  local dataDetail = Components.CreateText(dataRow, "名单文本", "meta", "textMuted", "LEFT")
+  Theme:Anchor(dataDetail, "TOPLEFT", dataName, "BOTTOMLEFT", 0, -3)
 
-  local status = Components.CreateText(content, "", "meta", "textMuted", "LEFT")
-  Theme:Anchor(status, "TOPLEFT", content, "TOPLEFT", 0, -(dataTop + 58 + metrics.textareaHeight + 8))
+  -- 折叠箭头：两条短横线拼出 ">"，展开时转成 "v"（与关闭按钮同一笔画语言）。
+  local chevronA = dataRow:CreateTexture(nil, "ARTWORK")
+  chevronA:SetSize(9, 1.6)
+  Theme:SetColorTexture(chevronA, "textMuted")
+  local chevronB = dataRow:CreateTexture(nil, "ARTWORK")
+  chevronB:SetSize(9, 1.6)
+  Theme:SetColorTexture(chevronB, "textMuted")
 
-  local area = Components.CreateTextArea(content, { height = metrics.textareaHeight })
+  local panel = CreateFrame("Frame", nil, content)
+  panel:SetSize(metrics.resultTileWidth, metrics.textareaHeight + 44)
+  panel:Hide()
+
+  local status = Components.CreateText(panel, "", "meta", "textMuted", "LEFT")
+  Theme:Anchor(status, "TOPLEFT", panel, "TOPLEFT", 0, -(metrics.textareaHeight + 36))
+
+  local area = Components.CreateTextArea(panel, { height = metrics.textareaHeight })
   Theme:SetSize(area.frame, metrics.resultTileWidth, metrics.textareaHeight)
-  Theme:Anchor(area.frame, "TOPLEFT", content, "TOPLEFT", 0, -(dataTop + 58))
+  Theme:Anchor(area.frame, "TOPLEFT", panel, "TOPLEFT", 0, 0)
 
   local function BuildExport()
     local records = LN.Notes.List()
@@ -301,18 +320,43 @@ local function CreateSettingsPage(parent)
   local handlers = { [1] = BuildExport, [2] = RunImport, [3] = function() area:FocusAndSelect() end }
   local previous
   for index, entry in ipairs(DATA_ACTIONS) do
-    local button = Components.CreateNavigationButton(actions, {
+    local button = Components.CreateNavigationButton(panel, {
       width = 48, height = 28, text = entry.text, onClick = handlers[index],
     })
-    if previous then
-      Theme:Anchor(button.frame, "LEFT", previous, "RIGHT", 16, 0)
-    else
-      Theme:Anchor(button.frame, "LEFT", actions, "LEFT", 0, 0)
-    end
+    Theme:Anchor(button.frame, "TOPLEFT", panel, "TOPLEFT", (index - 1) * 64, -(metrics.textareaHeight + 8))
     previous = button.frame
   end
 
-  Theme:SetSize(content, metrics.resultTileWidth, dataTop + 58 + metrics.textareaHeight + 30)
+  local function PaintChevron()
+    if expanded then
+      chevronA:SetRotation(math.rad(45))
+      Theme:Anchor(chevronA, "CENTER", dataRow, "RIGHT", -14, -2.6)
+      chevronB:SetRotation(math.rad(-45))
+      Theme:Anchor(chevronB, "CENTER", dataRow, "RIGHT", -8, -2.6)
+    else
+      chevronA:SetRotation(math.rad(-45))
+      Theme:Anchor(chevronA, "CENTER", dataRow, "RIGHT", -14, -2.6)
+      chevronB:SetRotation(math.rad(45))
+      Theme:Anchor(chevronB, "CENTER", dataRow, "RIGHT", -14, 2.6)
+    end
+  end
+
+  local function SetExpanded(value)
+    expanded = value == true
+    Theme:SetShown(panel, expanded)
+    PaintChevron()
+    local height = dataTop + DATA_ROW_STRIDE + 12
+    if expanded then
+      height = height + panel:GetHeight() + 8
+      if Motion then Motion:Slide(panel, 1) end
+    end
+    Theme:SetSize(content, metrics.resultTileWidth, height)
+  end
+
+  dataRow:SetScript("OnClick", function() SetExpanded(not expanded) end)
+  PaintChevron()
+
+  Theme:SetSize(content, metrics.resultTileWidth, dataTop + DATA_ROW_STRIDE + 24)
 
   local function Refresh()
     for _, row in ipairs(rows) do
@@ -320,6 +364,9 @@ local function CreateSettingsPage(parent)
       row.toggle:SetChecked(checked)
       Components.SetText(row.stateText, checked and "开启" or "关闭")
     end
+    SetExpanded(expanded)
+    Components.SetText(status, "")
+    area.box:SetText("")
   end
   parent:HookScript("OnShow", Refresh)
   Refresh()
@@ -333,19 +380,54 @@ local function CreateHeader(frame)
   Theme:Anchor(header, "TOPRIGHT", frame, "TOPRIGHT", 0, 0)
   header:SetHeight(metrics.headerHeight)
 
-  local logo = header:CreateTexture(nil, "ARTWORK")
+  -- logo 装在固定尺寸的 holder 里：弹跳只动里面的贴图，标题钉在 holder 上不跟着动。
+  local holder = CreateFrame("Frame", nil, header)
+  holder:SetSize(metrics.brandIconSize, metrics.brandIconSize)
+  Theme:Anchor(holder, "LEFT", header, "LEFT", metrics.contentPadding, 0)
+  local logo = holder:CreateTexture(nil, "ARTWORK")
   logo:SetSize(metrics.brandIconSize, metrics.brandIconSize)
-  Theme:Anchor(logo, "LEFT", header, "LEFT", metrics.contentPadding, 0)
+  Theme:Anchor(logo, "CENTER", holder, "CENTER", 0, 0)
   if logo.SetTexCoord then logo:SetTexCoord(0, 1, 0, 1) end
   logo:SetTexture(Theme.Media.logo)
   headerLogo = logo
 
   local title = Components.CreateText(header,
     Theme.BrandColor .. "荔枝" .. Theme.BrandColorClose .. "笔记", "brand", "text", "LEFT")
-  Theme:Anchor(title, "LEFT", logo, "RIGHT", metrics.brandLabelGap, 0)
+  Theme:Anchor(title, "LEFT", holder, "RIGHT", metrics.brandLabelGap, 0)
 
   local close = Components.CreateCloseButton(header, function() Layer.HideBase() end)
   Theme:Anchor(close.frame, "RIGHT", header, "RIGHT", -metrics.contentPadding, 0)
+
+  -- 荔枝天赋的头部动作按钮：32 命中 / 20 图形，常态暖白、悬停荔枝红、按下变暗。
+  -- 设置与返回共用一个槽位，随当前页互换。
+  local function CreateHeaderAction(texture, onClick)
+    local button = CreateFrame("Button", nil, header)
+    button:SetSize(metrics.headerActionHit, metrics.headerActionHit)
+    Theme:Anchor(button, "RIGHT", header, "RIGHT",
+      -(metrics.contentPadding + metrics.headerActionHit + 8), 0)
+    local icon = button:CreateTexture(nil, "ARTWORK")
+    icon:SetSize(metrics.headerActionIcon, metrics.headerActionIcon)
+    Theme:Anchor(icon, "CENTER", button, "CENTER", 0, 0)
+    icon:SetTexture(texture)
+    local function paint(hovered, pressed)
+      Theme:SetVertexColor(icon, hovered and "accentHover" or "text")
+      icon:SetAlpha(pressed and 0.7 or 1)
+    end
+    paint(false)
+    button:SetScript("OnEnter", function() paint(true) end)
+    button:SetScript("OnLeave", function() paint(false) end)
+    button:SetScript("OnMouseDown", function() paint(true, true) end)
+    button:SetScript("OnMouseUp", function() paint(true) end)
+    button:SetScript("OnHide", function() paint(false) end)
+    button:SetScript("OnClick", onClick)
+    return button
+  end
+
+  headerActions = {
+    settings = CreateHeaderAction(Theme.Media.settings, function() UI.SelectPage(2) end),
+    back = CreateHeaderAction(Theme.Media.back, function() UI.SelectPage(1) end),
+  }
+  headerActions.back:Hide()
   return header
 end
 
@@ -368,22 +450,8 @@ local function CreateWindow()
 
   CreateHeader(frame)
 
-  -- 侧栏：无底色块、无分隔线，只靠文字明度与红色竖条表达状态。
-  local sidebar = CreateFrame("Frame", nil, frame)
-  Theme:Anchor(sidebar, "TOPLEFT", frame, "TOPLEFT", 0, -metrics.headerHeight)
-  Theme:Anchor(sidebar, "BOTTOMLEFT", frame, "BOTTOMLEFT", 0, metrics.footerHeight)
-  sidebar:SetWidth(metrics.sidebarWidth)
-
-  local navY = 8
-  for index, name in ipairs(NAV_NAMES) do
-    local item = Components.CreateNavItem(sidebar, name, function() UI.SelectPage(index) end)
-    Theme:Anchor(item.frame, "TOPLEFT", sidebar, "TOPLEFT", metrics.navInset, -navY)
-    navY = navY + metrics.navHeight + metrics.navGap
-    navItems[index] = item
-  end
-
   local body = CreateFrame("Frame", nil, frame)
-  Theme:Anchor(body, "TOPLEFT", sidebar, "TOPRIGHT", 0, 0)
+  Theme:Anchor(body, "TOPLEFT", frame, "TOPLEFT", metrics.contentPadding, -metrics.headerHeight)
   Theme:Anchor(body, "BOTTOMRIGHT", frame, "BOTTOMRIGHT", -metrics.contentPadding, metrics.footerHeight)
 
   local footer = CreateFrame("Frame", nil, frame)
@@ -399,10 +467,13 @@ end
 
 function UI.SelectPage(index)
   if not window then return end
-  index = math.max(1, math.min(#NAV_NAMES, index))
+  index = math.max(1, math.min(#pages, index))
   if currentPage == index then return end
   for page = 1, #pages do Theme:SetShown(pages[page], page == index) end
-  for page = 1, #navItems do navItems[page]:SetSelected(page == index) end
+  if headerActions then
+    Theme:SetShown(headerActions.settings, index == 1)
+    Theme:SetShown(headerActions.back, index == 2)
+  end
   currentPage = index
   if Motion then Motion:Slide(pages[index], 1) end
   if index == 1 then UI.RefreshList() end
@@ -425,15 +496,26 @@ function UI.Show()
   if not window then
     local body
     window, body = CreateWindow()
-    for index = 1, #NAV_NAMES do
+    -- 页面用显式尺寸 + 单锚：滑动动画整组还原锚点，双锚框体不参与位移动画之外的布局。
+    local bodyWidth = metrics.windowWidth - metrics.contentPadding * 2
+    local bodyHeight = metrics.windowHeight - metrics.headerHeight - metrics.footerHeight
+    for index = 1, 2 do
       local page = CreateFrame("Frame", nil, body)
-      Theme:Anchor(page, "TOPLEFT", body, "TOPLEFT", metrics.contentPadding, 0)
-      Theme:Anchor(page, "BOTTOMRIGHT", body, "BOTTOMRIGHT", -6, 0)
+      Theme:SetSize(page, bodyWidth, bodyHeight)
+      Theme:Anchor(page, "TOPLEFT", body, "TOPLEFT", 0, 0)
       page:Hide()
       pages[index] = page
     end
     CreateListPage(pages[1])
     CreateSettingsPage(pages[2])
+    -- ESC 在设置页先返回名单，再退出窗口（荔枝天赋的 Back 语义）。
+    Layer.SetEscapeBack(function()
+      if window and window:IsShown() and currentPage == 2 then
+        UI.SelectPage(1)
+        return true
+      end
+      return false
+    end)
   end
 
   currentPage = 0
