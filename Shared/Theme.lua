@@ -63,7 +63,7 @@ Theme.FontSizes = {
   title = 14,
   body = 12,
   meta = 11,
-  input = 12,
+  input = 16,
 }
 
 --- 尺寸与 Lychee 启动器一一对应：头/底 56、行高 46 行距 6、底部图标 28 命中 / 18 图形。
@@ -98,7 +98,7 @@ Theme.Metrics = {
   selectionWidth = 2,
   selectionHeight = 22,
 
-  fieldHeight = 32,
+  fieldHeight = 40,
   textareaHeight = 140,
 
   iconSize = 28,
@@ -109,7 +109,7 @@ Theme.Metrics = {
   scrollThumbWidth = 3,
   scrollThumbMin = 24,
   scrollThumbMax = 48,
-  scrollWheelStep = 48,
+  scrollWheelStep = 52,
 
   popupCodeWidth = 208,
   popupCodeHeight = 252,
@@ -118,7 +118,7 @@ Theme.Metrics = {
   popupCodeSize = 176,
 
   dialogWidth = 400,
-  dialogHeight = 280,
+  dialogHeight = 292,
   dialogInset = 20,
 
   border = 1,

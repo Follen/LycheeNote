@@ -170,13 +170,15 @@ TOC 加载时允许发生的事：建立命名空间与令牌表（[Core/Bootstr
 
 ### 5.2 离线替身测试
 
-`tests/smoke.lua` 用最小 WoW 替身按 TOC 顺序加载全部文件，模拟 `ADDON_LOADED` / `PLAYER_REGEN_DISABLED`，并跑通 28 项断言。它验证的是逻辑、生命周期与布局几何，**不是**客户端事件顺序、受保护操作、taint 或像素渲染。
+`tests/smoke.lua` 用最小 WoW 替身按 TOC 顺序加载全部文件，模拟 `ADDON_LOADED` / `PLAYER_REGEN_DISABLED`，并跑通 31 项断言。它验证的是逻辑、生命周期与布局几何，**不是**客户端事件顺序、受保护操作、taint 或像素渲染。
 
 ```
 lua tests/smoke.lua
 ```
 
-任一断言失败即视为回归。当前覆盖：跨模块 API 契约（源码抽取 `LN.<模块>.<方法>` 并逐个核对存在）、加载顺序、SavedVariables 名称与配置清理、首次开窗、**锚点集合与各区域非零尺寸、主窗口几何与 Lychee 对齐**、侧栏当前项红条与文字提亮、底栏联系入口两图标且无文字署名、行池上限 12 且与名单长度无关、写入 / 覆盖 / 自我保护、61 条大名单刷新、理由弹窗开关、导入导出往返、移除、页面切换、停用退订、右键菜单注册、专精缓存、战斗关闭、ESC 三层优先级、斜杠命令、集合石缺席时零副作用。
+任一断言失败即视为回归。当前覆盖：跨模块 API 契约（源码抽取 `LN.<模块>.<方法>` 并逐个核对存在）、加载顺序、SavedVariables 名称与配置清理、首次开窗、**锚点集合与各区域非零尺寸、主窗口几何与 Lychee 对齐、窗口与浮层应用 uiScale**、侧栏当前项红条与文字提亮、底栏联系入口两图标且无文字署名、**联系弹窗锚在入口栏上方**、**设置页三行开关与数据段结构**、行池上限 12 且与名单长度无关、写入 / 覆盖 / 自我保护、61 条大名单刷新、理由弹窗开关、导入导出往返、移除、页面切换、停用退订、右键菜单注册、专精缓存、战斗关闭、ESC 三层优先级、斜杠命令、集合石缺席时零副作用。
+
+**沙箱固定跑 `reduceMotion = true`**：替身没有帧驱动，动画 `OnUpdate` 永不触发，延迟 Hide 会把「关窗」卡在中间态。离线只断言动画落定后的终态（断言前调 `Motion.FinishAll()`）；补间本身的正确性由实机探针与视觉验收覆盖。
 
 #### 5.2.1 替身必须拒绝不存在的 API（血的教训）
 
@@ -209,7 +211,7 @@ lycheedev source inspect --snapshot <PIN> --path Interface/AddOns/Blizzard_APIDo
 
 ### 5.3 实机探针
 
-`tests/probe_live_diag.lua` 是窗口结构探针：通过 lycheedev 在当前客户端里打开主窗口，递归统计子框体 / 纹理 / 字体串、尺寸、字体高度，并逐条 `pcall` 走真实入口（开窗、切页、弹窗）。断言覆盖：侧栏 172 宽、2 个条目 140 × 32、红条 2 × 22 随选区翻转、标签字节比对；底栏社交栏 64 × 28、两个 28 × 28 按钮带图标纹理、底栏无文字署名；全树无 18 × 15 的暴雪滚动条箭头按钮（`UIPanelScrollFrameTemplate` 回归判据）。
+`tests/probe_live_diag.lua` 是窗口结构探针：通过 lycheedev 在当前客户端里打开主窗口，递归统计子框体 / 纹理 / 字体串、尺寸、字体高度，并逐条 `pcall` 走真实入口（开窗、切页、弹窗）。断言覆盖：窗口 `GetScale` 为 uiScale；侧栏 172 宽、2 个条目 140 × 32、红条 2 × 22 随选区翻转、标签字节比对；设置页含「动态效果」行、「数据」小节头、3 个 48 × 28 按钮、文本区 `input` 字号；底栏社交栏 64 × 28、两个 28 × 28 按钮带图标纹理、底栏无文字署名；全树无 18 × 15 的暴雪滚动条箭头按钮（`UIPanelScrollFrameTemplate` 回归判据）。
 
 ```
 lycheedev live execute --project <项目目录> --session <CON> --file tests/probe_live_diag.lua --request <稳定键> --budget-seconds 30 --wait-seconds 180 --policy observation --format json
@@ -273,7 +275,8 @@ lycheedev live execute --project <项目目录> --session <CON> --file tests/pro
 | 场景 | 限制 | 依据 |
 | --- | --- | --- |
 | TOC 加载后的常驻 Frame | ≤ 5（事件框、ESC 框、检视框，其余惰性） | `Core/Init.lua`、`Shared/Layer.lua` |
-| 主窗口首次打开新建 Frame | ≤ 400 | 1 窗口 + 头部 + 侧栏（2 条目）+ 内容 + 底栏（社交栏）+ 2 页面 + 12 行 + 1 文本区；联系弹窗、提示框/菜单惰性 |
+| 动画驱动 Frame | 恒为 1 个共享驱动，仅动画期间挂 `OnUpdate`，结束即解绑 | `Shared/Motion.lua` |
+| 主窗口首次打开新建 Frame | ≤ 400 | 1 窗口 + 头部 + 侧栏（2 条目）+ 内容 + 底栏（社交栏）+ 2 页面 + 12 行 + 1 文本区（含内嵌滚动壳）；联系弹窗、提示框/菜单惰性 |
 | 名单 500 条后的 Frame 数 | 与名单 5 条时相同 | 行池封顶 12 |
 | 窗口 100 次开关后 Frame 数 | 增长 = 0 | 全部惰性创建后复用 |
 | `GROUP_ROSTER_UPDATE` 突发 50 次 | 待执行任务始终 ≤ 1，额外打印 0 条 | `Events.CheckParty` |
@@ -281,6 +284,6 @@ lycheedev live execute --project <项目目录> --session <CON> --file tests/pro
 | 专精缓存 | 128 条 / 300 秒 / FIFO | `Inspect` |
 | 集合石加载重试 | 8 次 / 2 秒间隔 / 成功后停止 | `MeetingStone.Schedule` |
 | 导入单次分配 | 与输入大小成正比，不叠加缓存 | `Notes.Merge` |
-| 常驻每帧回调 | 0（滚动条拖拽期间的 `OnUpdate` 除外，且拖拽结束即解绑） | `Components.CreateScrollbar` |
+| 常驻每帧回调 | 0（滚动条拖拽、动画进行中的共享驱动 `OnUpdate` 除外，结束即解绑） | `Components.CreateScrollbar`、`Shared/Motion.lua` |
 
 **待补**：队伍检查耗时、100 次窗口开关的保留增长、61 条与 500 条名单的对照读数。补齐后在上表登记实测值并注明环境（客户端 build、UI 缩放、样本数）。

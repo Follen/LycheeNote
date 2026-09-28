@@ -7,9 +7,15 @@ local LN = ns.LycheeNote
 
 local Theme = LN.Theme
 local Components = LN.Components
+local Motion = LN.Motion
 
 local Layer = {}
 LN.Layer = Layer
+
+--- 动画只在非战斗时进行；战斗路径全部直接落定。
+local function canAnimate()
+  return Motion ~= nil and not (InCombatLockdown and InCombatLockdown())
+end
 
 local baseFrame      -- 常规窗口
 local modalFrame     -- 模态弹窗
@@ -91,6 +97,7 @@ function Layer.ShowBase(frame)
   Layer.RegisterCombatHider(frame)
   frame:Show()
   frame:Raise()
+  if canAnimate() then Motion:Presence(frame, true) end
   Layer.EnableEscape()
   UpdateInteraction()
 end
@@ -99,10 +106,14 @@ function Layer.HideBase()
   if not baseFrame then return end
   local frame = baseFrame
   baseFrame = nil
-  frame:Hide()
   Layer.UnregisterCombatHider(frame)
   Components.HideTooltip()
   Components.HideActionMenu()
+  if canAnimate() then
+    Motion:Presence(frame, false, function() frame:Hide() end)
+  else
+    frame:Hide()
+  end
   if not modalFrame then Layer.DisableEscape() end
   UpdateInteraction()
 end
@@ -117,6 +128,7 @@ function Layer.ShowModal(frame)
   Layer.RegisterCombatHider(frame)
   frame:Show()
   frame:Raise()
+  if canAnimate() then Motion:Slide(frame, 1) end
   Layer.EnableEscape()
   UpdateInteraction()
 end

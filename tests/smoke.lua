@@ -80,8 +80,14 @@ local function Region(kind)
   region.IsObjectType = function(self, t) return self.__kind == t end
   region.GetObjectType = function(self) return self.__kind end
   region.GetEffectiveScale = function() return 1 end
+  region.SetScale = function(self, scale) region.__scale = scale end
+  region.GetScale = function() return region.__scale end
   region.GetTop = function() return 0 end
   region.GetNumPoints = function() return #region.__points end
+  region.GetPoint = function(self, index)
+    local p = region.__points[index or 1]
+    if p then return p[1], p[2], p[3], p[4], p[5] end
+  end
   region.GetFrameLevel = function() return region.__level or 1 end
   region.GetVerticalScroll = function() return region.__scroll or 0 end
   region.GetAttribute = function() return nil end
@@ -297,6 +303,7 @@ end
 local TOC = {
   "Core/Bootstrap.lua",
   "Shared/Theme.lua",
+  "Shared/Motion.lua",
   "Shared/Components.lua",
   "Shared/Layer.lua",
   "Core/Config.lua",
@@ -326,6 +333,11 @@ for _, relative in ipairs(TOC) do
     end
   end
 end
+
+-- 沙箱没有帧驱动，动画 OnUpdate 永不触发，延迟 Hide 会把「关窗」卡在中间态。
+-- 离线一律跑 reduceMotion=true：Motion 走直接落定分支，断言只认终态；
+-- 补间本身的正确性由实机探针验证。
+_G.LycheeNoteDB = { reduceMotion = true }
 
 --- 跨模块 API 契约检查。
 --- 实机事故：模块改名后 MeetingStone.lua / Events.lua 仍在调 LN.Notes.FindRecord，
@@ -526,19 +538,25 @@ Check("侧栏：当前项红条 + 文字提亮", function()
     assert(bar, "导航项缺少红色竖条贴图")
   end
 
-  -- 第 1 页时第 1 项亮条、第 2 项不亮；切页后互换
+  -- 第 1 页时第 1 项亮条、第 2 项不亮；切页后互换。
+  -- 红条带 0.10s 淡入淡出：断言前先落定全部动画，只认终态。
+  local Motion = ns.LycheeNote.Motion
+  assert(Motion and Motion.FinishAll, "Motion 模块缺失或缺少 FinishAll")
   local function barOf(nav)
     for _, region in ipairs({ nav:GetRegions() }) do
       if region:GetObjectType() == "Texture" and region:IsShown() then return region end
     end
   end
   ns.LycheeNote.UI.SelectPage(1)
+  Motion.FinishAll()
   assert(barOf(navs[1]), "第 1 页时第 1 项应显示红条")
   assert(not barOf(navs[2]), "第 1 页时第 2 项不应显示红条")
   ns.LycheeNote.UI.SelectPage(2)
+  Motion.FinishAll()
   assert(barOf(navs[2]), "第 2 页时第 2 项应显示红条")
   assert(not barOf(navs[1]), "第 2 页时第 1 项不应显示红条")
   ns.LycheeNote.UI.SelectPage(1)
+  Motion.FinishAll()
 end)
 
 --- 底部联系入口与 Lychee 同形，且不再有作者文字。
@@ -602,6 +620,81 @@ Check("底栏：作者微信 + GitHub 两个图标，无文字署名", function(
     end
   end
   assert(not credited, "底栏子控件里仍有作者文字署名")
+end)
+
+--- uiScale 是「整体偏小 13%」事故的修正：所有窗口都必须真的缩放。
+Check("窗口与浮层应用 uiScale", function()
+  local M = ns.LycheeNote.Theme.Metrics
+  local base = ns.LycheeNote.Layer.GetBase()
+  assert(base:GetScale() == M.uiScale, "主窗口缩放应为 " .. M.uiScale .. "，实际 " .. tostring(base:GetScale()))
+  local dialog = ns.LycheeNote.Dialogs
+  dialog.ShowAddDialog("缩放测试", "测试服")
+  local modal = ns.LycheeNote.Layer.HasModal()
+  assert(modal, "弹窗应处于模态状态")
+  -- 模态弹窗就是当前 shells 里的 frame，从 Layer 拿不到引用，走遍历找 FULLSCREEN_DIALOG 窗口。
+  local found
+  for _, frame in ipairs({ _G.UIParent:GetChildren() }) do
+    if frame.GetScale and frame:GetScale() == M.uiScale and frame:GetWidth() == M.dialogWidth then
+      found = frame
+    end
+  end
+  assert(found, "弹窗未应用 uiScale")
+  if ns.LycheeNote.Layer.HideModal then ns.LycheeNote.Layer.HideModal(found) end
+end)
+
+--- 联系弹窗的荔枝方案：锚在入口栏上方右对齐，不再居中于 UIParent。
+Check("联系弹窗锚在入口栏上方", function()
+  local Components = ns.LycheeNote.Components
+  local Motion = ns.LycheeNote.Motion
+  local host = CreateFrame("Frame", nil, _G.UIParent)
+  local view = Components.CreateSocialBar(host, {
+    { icon = "github", title = "GitHub", url = "https://example.com" },
+  })
+  view:Open(view.entries[1])
+  Motion.FinishAll()
+  assert(view.popup, "弹窗未创建")
+  local point = view.popup.__points[1]
+  assert(point and point[1] == "BOTTOMRIGHT", "弹窗第一锚点应为 BOTTOMRIGHT")
+  assert(point[2] == view.frame, "弹窗应锚在入口栏框体上")
+  assert(point[3] == "TOPRIGHT", "弹窗应锚在入口栏上方")
+  assert(view.backdrop and view.backdrop:IsShown(), "点击遮罩应处于显示状态")
+  view:Close()
+end)
+
+--- 设置页 = 三行开关（含动态效果）+ 数据段（小节头 / 28 高按钮 / 滚动文本区）。
+Check("设置页结构：三行开关与数据段", function()
+  local base = ns.LycheeNote.Layer.GetBase()
+  ns.LycheeNote.UI.SelectPage(2)
+  ns.LycheeNote.Motion.FinishAll()
+
+  local buttons, texts, scrollFrames = {}, {}, 0
+  local function walk(node)
+    for _, child in ipairs({ node:GetChildren() }) do
+      local kind = child:GetObjectType()
+      if kind == "Button" then buttons[#buttons + 1] = child end
+      if kind == "ScrollFrame" then scrollFrames = scrollFrames + 1 end
+      walk(child)
+    end
+    for _, region in ipairs({ node:GetRegions() }) do
+      if region:GetObjectType() == "FontString" and (region:GetText() or "") ~= "" then
+        texts[#texts + 1] = region:GetText()
+      end
+    end
+  end
+  walk(base)
+
+  local joined = table.concat(texts, "\n")
+  assert(joined:find("动态效果", 1, true), "缺少「动态效果」开关行")
+  assert(joined:find("数据", 1, true), "缺少数据段小节头")
+  local actionButtons = 0
+  for _, button in ipairs(buttons) do
+    if button:GetWidth() == 48 and button:GetHeight() == 28 then actionButtons = actionButtons + 1 end
+  end
+  assert(actionButtons == 3, "数据段应有 3 个 48×28 文字按钮，实际 " .. actionButtons)
+  -- 列表页 + 设置页各一个滚动视口；文本区内嵌第三个（TextArea 的滚动壳）。
+  assert(scrollFrames >= 3, "应有 ≥3 个裸 ScrollFrame（两页视口 + 文本区），实际 " .. scrollFrames)
+  ns.LycheeNote.UI.SelectPage(1)
+  ns.LycheeNote.Motion.FinishAll()
 end)
 
 --- 行池上限与名单长度无关。

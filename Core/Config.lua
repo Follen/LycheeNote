@@ -16,6 +16,7 @@ local defaults = {
   schemaVersion = SCHEMA_VERSION,
   enabled = true,
   askReason = true,
+  reduceMotion = false,
 }
 
 local function CopyDefaults(src, dst)

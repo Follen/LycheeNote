@@ -6,6 +6,7 @@ local ADDON_NAME, ns = ...
 local LN = ns.LycheeNote
 
 local Theme = LN.Theme
+local Motion = LN.Motion
 local Components = {}
 LN.Components = Components
 
@@ -103,10 +104,10 @@ function Components.CreateNavItem(parent, text, onClick)
     if self.selected then
       Theme:SetTextColor(self.label, "text")
       Theme:SetColorTexture(self.bar, "accent")
-      setShown(self.bar, true)
+      if Motion then Motion:Fade(self.bar, 1) else setShown(self.bar, true) end
     else
       Theme:SetTextColor(self.label, frame:IsMouseOver() and "accentHover" or "textMuted")
-      setShown(self.bar, false)
+      if Motion then Motion:Fade(self.bar, 0) else setShown(self.bar, false) end
     end
   end
   function component:SetSelected(selected)
@@ -215,7 +216,11 @@ function Components.CreateSocialBar(parent, entries)
     local isCode = entry.code ~= nil
     Theme:SetSize(self.popup, isCode and metrics.popupCodeWidth or metrics.popupLinkWidth,
       isCode and metrics.popupCodeHeight or metrics.popupLinkHeight)
-    self.popup:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
+    -- 荔枝的方案：弹窗锚在联系入口栏上方右对齐，缩放与窗口一致，滑入登场。
+    -- 不再居中于 UIParent——那是与窗口脱节的浮岛。
+    self.popup:SetScale(bar:GetEffectiveScale() / UIParent:GetEffectiveScale())
+    self.popup:ClearAllPoints()
+    self.popup:SetPoint("BOTTOMRIGHT", bar, "TOPRIGHT", 0, 8)
     Components.SetText(self.title, entry.title)
     Components.SetText(self.hint, isCode and "微信扫一扫" or "Ctrl+C 复制 · Esc 退出")
     Theme:SetShown(self.input, not isCode)
@@ -226,6 +231,7 @@ function Components.CreateSocialBar(parent, entries)
       self.input:SetText(entry.url or "")
     end
     Theme:SetShown(self.backdrop, true)
+    if Motion then Motion:Slide(self.popup, 1) end
     if not isCode then
       self.input:SetFocus()
       self.input:HighlightText()
@@ -323,13 +329,16 @@ function Components.CreateToggle(parent, onChanged)
   function component:Paint(animated)
     local checked = self.checked == true
     local x = checked and metrics.switchWidth - 16 or 2
-    if animated ~= false and knob.SetPoint and (knob.__lnX ~= x) then
-      knob.__lnX = x
+    if animated ~= false and Motion then
+      Motion:MoveX(knob, frame, x)
+      Motion:Fade(base, checked and 1 or 0)
+    else
+      knob.__lnMoveX = x
       knob:ClearAllPoints()
       knob:SetPoint("LEFT", frame, "LEFT", x, 0)
+      base:SetAlpha(checked and 1 or 0)
+      setShown(base, true)
     end
-    if base.SetAlpha then base:SetAlpha(checked and 1 or 0) end
-    if not checked then setShown(base, true) end
   end
 
   function component:SetChecked(checked, animated)
@@ -392,26 +401,53 @@ function Components.CreateInput(parent, options)
   return box
 end
 
---- 多行文本区：圆角外壳 + 内嵌 EditBox，供导入/导出/调试日志共用。
+--- 多行文本区：圆角外壳 + 内嵌滚动视口 + EditBox，供导入/导出共用。
+--- 文字走 input 字号（16，无阴影），不再是继承的 ChatFontNormal；
+--- 光标移动带动滚动、滚轮步进与列表一致——荔枝天赋 field 的同款做法。
 function Components.CreateTextArea(parent, options)
   options = options or {}
+  local metrics = Theme.Metrics
+  local width = options.width or 400
+  local height = options.height or metrics.textareaHeight
   local shell = CreateFrame("Frame", nil, parent)
-  shell:SetSize(options.width or 400, options.height or Theme.Metrics.textareaHeight)
+  shell:SetSize(width, height)
   local background = Theme:CreateRoundedSurface(shell, "code", Theme.Metrics.radiusControl)
 
-  local box = CreateFrame("EditBox", nil, shell)
-  Theme:Anchor(box, "TOPLEFT", shell, "TOPLEFT", 10, -10)
-  Theme:Anchor(box, "BOTTOMRIGHT", shell, "BOTTOMRIGHT", -10, 10)
+  local scroll = CreateFrame("ScrollFrame", nil, shell)
+  Theme:Anchor(scroll, "TOPLEFT", shell, "TOPLEFT", 10, -10)
+  Theme:Anchor(scroll, "BOTTOMRIGHT", shell, "BOTTOMRIGHT", -10, 10)
+  shell:EnableMouseWheel(true)
+  shell:SetScript("OnMouseWheel", function(_, delta)
+    if InCombatLockdown and InCombatLockdown() then return end
+    local maximum = scroll:GetVerticalScrollRange() or 0
+    local target = (scroll:GetVerticalScroll() or 0) - delta * metrics.scrollWheelStep
+    scroll:SetVerticalScroll(math.max(0, math.min(maximum, target)))
+  end)
+
+  local box = CreateFrame("EditBox", nil, scroll)
+  box:SetWidth(math.max(1, width - 20))
+  box:SetHeight(math.max(1, height - 20))
+  Theme:SetFont(box, "input")
   box:SetMultiLine(options.multiLine ~= false)
   box:SetAutoFocus(false)
   box:SetMaxLetters(options.maxLetters or 800000)
-  box:SetFontObject("ChatFontNormal")
   box:SetJustifyH("LEFT")
   box:SetJustifyV("TOP")
   box:SetTextInsets(0, 0, 0, 0)
   Theme:SetTextColor(box, "text")
+  scroll:SetScrollChild(box)
+  box:SetScript("OnCursorChanged", function(_, _, cursorY, _, cursorHeight)
+    local top = scroll:GetVerticalScroll() or 0
+    local viewport = scroll:GetHeight() or 1
+    local position = -cursorY
+    if position < top then
+      scroll:SetVerticalScroll(math.max(0, position))
+    elseif position + cursorHeight > top + viewport then
+      scroll:SetVerticalScroll(position + cursorHeight - viewport)
+    end
+  end)
 
-  local component = { frame = shell, box = box, background = background }
+  local component = { frame = shell, box = box, background = background, scroll = scroll }
   function component:FocusAndSelect()
     box:SetFocus()
     box:HighlightText()
@@ -476,7 +512,11 @@ function Components.CreateListRow(parent, options)
       setShown(self.background, self.selected == true)
       if self.selected then Theme:SetColorTexture(self.background, "surfaceSelected") end
     end
-    setShown(self.bar, self.selected == true)
+    if Motion then
+      Motion:Fade(self.bar, self.selected and 1 or 0)
+    else
+      setShown(self.bar, self.selected == true)
+    end
     if self.selected then Theme:SetColorTexture(self.bar, "accent") end
   end
   function component:Bind(state)
@@ -625,6 +665,7 @@ function Components.CreateScrollView(parent, options)
 end
 
 --- 窗口外壳：圆角背景 + 1px 边框 + 拖动，ESC 由 Shared/Layer.lua 处理。
+--- 整窗按 uiScale 缩放：所有尺寸令牌按荔枝启动器口径设计，不缩放会整体偏小 13%。
 function Components.CreateWindow(parent, options)
   options = options or {}
   local metrics = Theme.Metrics
@@ -634,6 +675,7 @@ function Components.CreateWindow(parent, options)
   frame:SetToplevel(true)
   frame:SetClampedToScreen(true)
   frame:SetFrameStrata("DIALOG")
+  frame:SetScale(metrics.uiScale)
   Theme:CreateShell(frame)
   return frame
 end
@@ -653,6 +695,7 @@ local function EnsureActionMenu()
   local frame = CreateFrame("Frame", "LycheeNoteActionMenu", UIParent)
   frame:SetSize(160, ACTION_HEADER_HEIGHT + ACTION_ITEM_HEIGHT * 2)
   frame:SetFrameStrata("DIALOG")
+  frame:SetScale(Theme.Metrics.uiScale)
   frame:EnableMouse(true)
   frame:Hide()
   Theme:CreateRoundedSurface(frame, "tooltip", 8)
@@ -754,6 +797,7 @@ local function EnsureTooltip()
   local metrics = Theme.Metrics
   local frame = CreateFrame("Frame", "LycheeNoteTooltip", UIParent)
   frame:SetWidth(288)
+  frame:SetScale(metrics.uiScale)
   frame:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
   frame:SetFrameStrata("DIALOG")
   frame:Hide()

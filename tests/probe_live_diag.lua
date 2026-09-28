@@ -46,6 +46,7 @@ local navFrames = {}
 
 if base then
   put("win.size", string.format("%dx%d", base:GetWidth() or -1, base:GetHeight() or -1))
+  put("win.scale", tostring(type(base.GetScale) == "function" and base:GetScale() or "?"))
   put("win.alpha", string.format("%.2f", base:GetAlpha() or -1))
   put("win.level", base:GetFrameLevel())
   put("win.shown", tostring(base:IsShown()))
@@ -266,6 +267,42 @@ if LN.UI and LN.UI.SelectPage then
   put("page2", tostring(okp) .. " " .. oneLine(errp))
   put("page2.nav1bar", barShown(navFrames[1]))
   put("page2.nav2bar", barShown(navFrames[2]))
+
+  -- 设置页结构：动态效果行、数据小节头、3 个 48×28 按钮、滚动视口数、文本区字号
+  if base then
+    local texts, buttons, scrolls, editFont = {}, 0, 0, nil
+    local function walkSettings(node)
+      for _, child in ipairs({ node:GetChildren() }) do
+        local kind = child.GetObjectType and child:GetObjectType() or "?"
+        if kind == "Button" then
+          local w, h = child:GetWidth() or 0, child:GetHeight() or 0
+          if math.abs(w - 48) < 1.5 and math.abs(h - 28) < 1.5 then buttons = buttons + 1 end
+        elseif kind == "ScrollFrame" then
+          scrolls = scrolls + 1
+        elseif kind == "EditBox" then
+          local okf, _, fsize = pcall(child.GetFont, child)
+          if okf and fsize then editFont = fsize end
+        end
+        walkSettings(child)
+      end
+      for _, region in ipairs({ node:GetRegions() }) do
+        local kind = region.GetObjectType and region:GetObjectType() or "?"
+        if kind == "FontString" then
+          local okt, t = pcall(region.GetText, region)
+          if okt and t and t ~= "" then texts[#texts + 1] = t end
+        end
+      end
+    end
+    walkSettings(base)
+    local joined = table.concat(texts, "|")
+    put("p2.buttons", buttons)
+    put("p2.scrolls", scrolls)
+    put("p2.editfont", tostring(editFont))
+    -- 动态效果 / 数据，按 UTF-8 字节比对，避免源码编码干扰
+    put("p2.motion", tostring(joined:find("\229\138\168\230\128\129\230\149\136\230\158\156", 1, true) ~= nil))
+    put("p2.data", tostring(joined:find("\230\149\176\230\141\174", 1, true) ~= nil))
+  end
+
   pcall(LN.UI.SelectPage, 1)
   put("page1.nav1bar", barShown(navFrames[1]))
   put("page1.nav2bar", barShown(navFrames[2]))

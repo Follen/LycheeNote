@@ -9,6 +9,7 @@ local LN = ns.LycheeNote
 local Theme = LN.Theme
 local Components = LN.Components
 local Layer = LN.Layer
+local Motion = LN.Motion
 
 local UI = {}
 LN.UI = UI
@@ -40,6 +41,7 @@ local SOCIAL = {
 }
 
 local window
+local headerLogo
 local navItems = {}
 local pages = {}
 local rowPool = {}
@@ -171,7 +173,7 @@ local function CreateListPage(parent)
   listState = { view = view }
   listState.headerRow = CreateHeaderRow(view.content)
 
-  local empty = Components.CreateText(parent, "还没有记录", "body", "textDim", "CENTER")
+  local empty = Components.CreateText(parent, "还没有记录", "title", "textDim", "CENTER")
   Theme:Anchor(empty, "CENTER", view.frame, "CENTER", 0, 0)
   listState.empty = empty
   Theme:SetShown(empty, false)
@@ -197,6 +199,7 @@ end
 local SETTINGS = {
   { key = "enabled", name = "启用插件", detail = "关闭后停止右键标记与集合石高亮" },
   { key = "askReason", name = "标记时询问理由", detail = "关闭后直接记入「无理由」" },
+  { key = "reduceMotion", name = "动态效果", detail = "关闭后窗口与控件的过渡动画直接落定" },
 }
 
 local function CreateToggleRow(parent, item, index)
@@ -215,12 +218,21 @@ local function CreateToggleRow(parent, item, index)
   local toggle = Components.CreateToggle(row, function(checked)
     LN.Config.SetBool(item.key, checked)
     Components.SetText(stateText, checked and "开启" or "关闭")
+    if item.key == "reduceMotion" and checked and Motion then Motion.FinishAll() end
   end)
   Theme:Anchor(toggle.frame, "RIGHT", row, "RIGHT", 0, 0)
 
   row.toggle, row.stateText, row.key = toggle, stateText, item.key
   return row
 end
+
+--- 数据段沿用荔枝的天赋方案：meta 灰字小节头、28 高文字按钮、
+--- field 质感的滚动文本区、一行状态文字。不再是一排悬空的小按钮。
+local DATA_ACTIONS = {
+  { text = "导出" },
+  { text = "导入" },
+  { text = "全选" },
+}
 
 local function CreateSettingsPage(parent)
   local scroll = Components.CreateScrollView(parent)
@@ -232,19 +244,21 @@ local function CreateSettingsPage(parent)
     rows[index] = CreateToggleRow(content, item, index)
   end
 
-  -- 数据段：导出 / 导入 / 全选 + 文本区 + 状态行。不再单独占一页。
   local dataTop = #SETTINGS * ROW_STRIDE + 24
 
+  local sectionHeader = Components.CreateText(content, "数据", "meta", "textDim", "LEFT")
+  Theme:Anchor(sectionHeader, "TOPLEFT", content, "TOPLEFT", 0, -dataTop)
+
   local actions = CreateFrame("Frame", nil, content)
-  actions:SetSize(metrics.resultTileWidth, 24)
-  Theme:Anchor(actions, "TOPLEFT", content, "TOPLEFT", 0, -dataTop)
+  actions:SetSize(metrics.resultTileWidth, 28)
+  Theme:Anchor(actions, "TOPLEFT", content, "TOPLEFT", 0, -(dataTop + 24))
 
   local status = Components.CreateText(content, "", "meta", "textMuted", "LEFT")
-  Theme:Anchor(status, "TOPLEFT", content, "TOPLEFT", 0, -(dataTop + metrics.textareaHeight + 22))
+  Theme:Anchor(status, "TOPLEFT", content, "TOPLEFT", 0, -(dataTop + 58 + metrics.textareaHeight + 8))
 
   local area = Components.CreateTextArea(content, { height = metrics.textareaHeight })
   Theme:SetSize(area.frame, metrics.resultTileWidth, metrics.textareaHeight)
-  Theme:Anchor(area.frame, "TOPLEFT", content, "TOPLEFT", 0, -(dataTop + 30))
+  Theme:Anchor(area.frame, "TOPLEFT", content, "TOPLEFT", 0, -(dataTop + 58))
 
   local function BuildExport()
     local records = LN.Notes.List()
@@ -284,14 +298,11 @@ local function CreateSettingsPage(parent)
     UI.RefreshList()
   end
 
+  local handlers = { [1] = BuildExport, [2] = RunImport, [3] = function() area:FocusAndSelect() end }
   local previous
-  for _, entry in ipairs({
-    { text = "导出", onClick = BuildExport },
-    { text = "导入", onClick = RunImport },
-    { text = "全选", onClick = function() area:FocusAndSelect() end },
-  }) do
+  for index, entry in ipairs(DATA_ACTIONS) do
     local button = Components.CreateNavigationButton(actions, {
-      width = 48, height = 24, text = entry.text, onClick = entry.onClick,
+      width = 48, height = 28, text = entry.text, onClick = handlers[index],
     })
     if previous then
       Theme:Anchor(button.frame, "LEFT", previous, "RIGHT", 16, 0)
@@ -301,7 +312,7 @@ local function CreateSettingsPage(parent)
     previous = button.frame
   end
 
-  Theme:SetSize(content, metrics.resultTileWidth, dataTop + metrics.textareaHeight + 48)
+  Theme:SetSize(content, metrics.resultTileWidth, dataTop + 58 + metrics.textareaHeight + 30)
 
   local function Refresh()
     for _, row in ipairs(rows) do
@@ -327,6 +338,7 @@ local function CreateHeader(frame)
   Theme:Anchor(logo, "LEFT", header, "LEFT", metrics.contentPadding, 0)
   if logo.SetTexCoord then logo:SetTexCoord(0, 1, 0, 1) end
   logo:SetTexture(Theme.Media.logo)
+  headerLogo = logo
 
   local title = Components.CreateText(header,
     Theme.BrandColor .. "荔枝" .. Theme.BrandColorClose .. "笔记", "brand", "text", "LEFT")
@@ -392,6 +404,7 @@ function UI.SelectPage(index)
   for page = 1, #pages do Theme:SetShown(pages[page], page == index) end
   for page = 1, #navItems do navItems[page]:SetSelected(page == index) end
   currentPage = index
+  if Motion then Motion:Slide(pages[index], 1) end
   if index == 1 then UI.RefreshList() end
 end
 
@@ -427,6 +440,7 @@ function UI.Show()
   UI.SelectPage(1)
   UI.RefreshList()
   Layer.ShowBase(window)
+  if Motion and headerLogo then Motion:Brand(headerLogo, metrics.brandIconSize) end
   return true
 end
 
