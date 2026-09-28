@@ -70,12 +70,12 @@ Theme.FontSizes = {
 
 --- 尺寸与 Lychee 启动器一一对应：头/底 56、行高 46 行距 6、底部图标 28 命中 / 18 图形。
 --- 设置与返回共用头部动作槽位（荔枝天赋样式）：32 命中 / 20 图形。
---- 名单贴片占满内容区：窗口 760 − 左右内距 16×2 = 728。
+--- 窗口 640×440 @1.0：与荔枝启动器同配比，正文 12px 占比 1.9%，物理尺寸紧凑。
 Theme.Metrics = {
-  uiScale = 0.8,
+  uiScale = 1.0,
 
-  windowWidth = 760,
-  windowHeight = 520,
+  windowWidth = 640,
+  windowHeight = 440,
 
   headerHeight = 56,
   footerHeight = 56,
@@ -93,7 +93,7 @@ Theme.Metrics = {
   footerIconStride = 36,
 
   listInset = 0,
-  resultTileWidth = 728,
+  resultTileWidth = 608,
   rowHeight = 46,
   rowGap = 6,
   selectionWidth = 2,

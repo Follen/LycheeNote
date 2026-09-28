@@ -46,7 +46,7 @@ local function findActionButtons()
   for _, child in ipairs({ base:GetChildren() }) do
     if child.GetObjectType and child:GetObjectType() == "Frame" then
       local w, h = child:GetWidth() or 0, child:GetHeight() or 0
-      if math.abs(w - 760) < 2 and math.abs(h - 56) < 2 then
+      if math.abs(w - 640) < 2 and math.abs(h - 56) < 2 then
         for _, button in ipairs({ child:GetChildren() }) do
           if button.GetObjectType and button:GetObjectType() == "Button"
             and math.abs((button:GetWidth() or 0) - 32) < 1.5 then
@@ -66,7 +66,7 @@ local function findPages()
   local function walk(node)
     for _, child in ipairs({ node:GetChildren() }) do
       local w, h = child:GetWidth() or 0, child:GetHeight() or 0
-      if math.abs(w - 728) < 2 and math.abs(h - 408) < 2 then pages[#pages + 1] = child end
+      if math.abs(w - 608) < 2 and math.abs(h - 328) < 2 then pages[#pages + 1] = child end
       walk(child)
     end
   end

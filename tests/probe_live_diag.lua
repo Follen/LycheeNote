@@ -134,12 +134,12 @@ if base then
   for i = 1, math.min(#textures, 6) do put("x" .. i, textures[i]) end
 
   -- 签名控件断言：头部动作按钮 + 底栏联系入口 + 无暴雪滚动条箭头。
-  -- 头部/底栏都是 760×56，按贴顶/贴底区分。
+  -- 头部/底栏都是 640×56，按贴顶/贴底区分。
   local header, footer
   for _, child in ipairs({ base:GetChildren() }) do
     if child.GetObjectType and child:GetObjectType() == "Frame" then
       local w, h = child:GetWidth() or 0, child:GetHeight() or 0
-      if near(w, 760) and near(h, 56) then
+      if near(w, 640) and near(h, 56) then
         if math.abs((child:GetTop() or 0) - (base:GetTop() or 0)) < 2 then header = child end
         if math.abs((child:GetBottom() or 0) - (base:GetBottom() or 0)) < 2 then footer = child end
       end
@@ -293,13 +293,13 @@ if LN.UI and LN.UI.SelectPage then
   pcall(LN.UI.SelectPage, 1)
   put("page1.action1", shownState(actionButtons[1]))
   put("page1.action2", shownState(actionButtons[2]))
-  -- 名单页几何：贴片应占满内容区 728，无侧栏
+  -- 名单页几何：贴片应占满内容区 608，无侧栏
   if base then
     local pages = 0
     local function countPages(node)
       for _, child in ipairs({ node:GetChildren() }) do
         local w, h = child:GetWidth() or 0, child:GetHeight() or 0
-        if near(w, 728) and near(h, 408) then pages = pages + 1 end
+        if near(w, 608) and near(h, 328) then pages = pages + 1 end
         countPages(child)
       end
     end

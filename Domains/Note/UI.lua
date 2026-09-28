@@ -21,8 +21,8 @@ local EXPORT_PREFIX = "LN-"
 local MAX_ROWS = 12
 local ROW_STRIDE = metrics.rowHeight + metrics.rowGap
 local HEADER_ROW_HEIGHT = 24
-local HEADER_ROW_GAP = 10
-local HEADER_ROW_TOP = 4
+local HEADER_ROW_GAP = 6
+local HEADER_ROW_TOP = 2
 
 --- 列偏移合计 resultTileWidth，末列吃满剩余宽度。
 local COLUMNS = {
@@ -30,7 +30,7 @@ local COLUMNS = {
   { key = "server", title = "服务器", x = 112, width = 104, role = "meta" },
   { key = "classSpec", title = "职业专精", x = 216, width = 112, role = "meta" },
   { key = "timestamp", title = "加入时间", x = 328, width = 84, role = "meta" },
-  { key = "reason", title = "理由", x = 412, width = 316, role = "meta" },
+  { key = "reason", title = "理由", x = 412, width = 196, role = "meta" },
 }
 
 --- 底部联系入口，与 Lychee 中文版一致：作者微信 + GitHub。
@@ -327,17 +327,19 @@ local function CreateSettingsPage(parent)
     previous = button.frame
   end
 
+  -- 折叠 ">"：两笔在右侧汇合（上笔 +45 下笔 −45，中心都在汇合点左侧）；
+  -- 展开 "v"：两笔在底部汇合（中心分列汇合点两侧，角度不变）。
   local function PaintChevron()
     if expanded then
       chevronA:SetRotation(math.rad(45))
-      Theme:Anchor(chevronA, "CENTER", dataRow, "RIGHT", -14, -2.6)
+      Theme:Anchor(chevronA, "CENTER", dataRow, "RIGHT", -11.2, 3.2)
       chevronB:SetRotation(math.rad(-45))
-      Theme:Anchor(chevronB, "CENTER", dataRow, "RIGHT", -8, -2.6)
+      Theme:Anchor(chevronB, "CENTER", dataRow, "RIGHT", -4.8, 3.2)
     else
-      chevronA:SetRotation(math.rad(-45))
-      Theme:Anchor(chevronA, "CENTER", dataRow, "RIGHT", -14, -2.6)
-      chevronB:SetRotation(math.rad(45))
-      Theme:Anchor(chevronB, "CENTER", dataRow, "RIGHT", -14, 2.6)
+      chevronA:SetRotation(math.rad(45))
+      Theme:Anchor(chevronA, "CENTER", dataRow, "RIGHT", -11.2, -3.2)
+      chevronB:SetRotation(math.rad(-45))
+      Theme:Anchor(chevronB, "CENTER", dataRow, "RIGHT", -11.2, 3.2)
     end
   end
 
